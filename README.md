@@ -2,9 +2,21 @@
 
 A complete, free browser artillery game inspired by **Pocket Tanks (2001)**. Draft ten weapons, estimate your angle and power, and reshape the hills over ten volleys. Play against a friend on one device or two devices with a room code, challenge the CPU, or experiment with the unlimited arsenal in target practice.
 
+This repository is **public and open source under the MIT license**. Anyone can browse the code, clone it, fork it, or host their own copy. The published game is free to play and needs no account or installation.
+
 **[Play in your browser](https://yagyesh-bobde.github.io/pocket-tanks/)** · **[Movement / multiplayer captures](https://yagyesh-bobde.github.io/pocket-tanks/updates/)** · **[Visual comparison report](https://yagyesh-bobde.github.io/pocket-tanks/comparisons/)** · [Research and source attribution](docs/RESEARCH.md)
 
-![Gameplay](docs/comparisons/final/spider.png)
+![Current gameplay with the live angle wheel and terrain-following tank movement](docs/updates/live-aim.png)
+
+## What is included
+
+- Local two-player matches, three CPU difficulty levels, and unlimited target practice.
+- Two-device room-code play with alternating weapon draft, synchronized terrain and scores, reconnect, and rematch.
+- Thirty mechanically distinct weapons, destructible terrain, ten volleys, and four moves per tank.
+- Animated driving with tread motion, dust, engine audio, and optional supported-device vibration.
+- A draggable and scrollable angle wheel, live turret updates, and keyboard/mouse/touch controls.
+
+Validation covers **29 automated tests**: 20 engine tests, 6 browser tests, and 3 WebRTC tests. It includes 144 prediction-versus-impact physics cases, a complete two-client match, reconnects, and a real-time 160-particle Hail Storm. The deployment workflow runs these checks before publishing to GitHub Pages.
 
 This is an independent fan project, not affiliated with or endorsed by Blitwise Productions. Pocket Tanks and its game identity belong to Blitwise. All game code, tank illustrations, terrain rendering, effects, and sound synthesis here are newly made. Please support [the original game](https://www.blitwise.com/pocket-tanks).
 
@@ -13,6 +25,8 @@ This is an independent fan project, not affiliated with or endorsed by Blitwise 
 Node.js **22.12+** (or 24+) and npm are required.
 
 ```sh
+git clone https://github.com/yagyesh-bobde/pocket-tanks.git
+cd pocket-tanks
 npm ci
 npm run dev -- --host 127.0.0.1 --port 5180
 ```
