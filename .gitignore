@@ -4,3 +4,4 @@ dist
 reference/
 test-results/
 playwright-report/
+network-test-results/

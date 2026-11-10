@@ -7,6 +7,10 @@ import {
   cpuAim,
   predict,
   draftPool,
+  launch,
+  ballisticStep,
+  GRAVITY,
+  STEP,
 } from "../src/engine.js";
 import { WEAPONS } from "../src/weapons.js";
 const step = (g, seconds) => {
@@ -66,7 +70,21 @@ test("points reward enemy hits and penalize self hits without destroying tanks",
 });
 test("movement uses four shared-match charges and rejects large cliffs", () => {
   const g = flat();
-  for (let i = 0; i < 4; i++) assert.ok(g.move(1));
+  for (let i = 0; i < 4; i++) {
+    const x = g.active.x;
+    assert.ok(g.move(1));
+    assert.equal(g.active.x, x, "move must not teleport");
+    assert.equal(g.fire("single"), false, "cannot fire in transit");
+    assert.equal(g.move(1), false, "cannot spend another charge mid-move");
+    step(g, 0.25);
+    assert.ok(
+      g.active.x > x && g.active.x < x + 25,
+      "physical position advances during movement",
+    );
+    step(g, 0.5);
+    assert.equal(g.active.x, x + 25);
+    assert.equal(g.phase, "aiming");
+  }
   assert.equal(g.active.moves, 0);
   assert.equal(g.move(-1), false);
   const h = flat();
@@ -193,4 +211,99 @@ test("liquid pellet damage is bounded after settling on flat ground", () => {
     resolve(g);
     assert.ok(g.tanks[0].score < 800, `${id}: ${g.tanks[0].score}`);
   }
+});
+
+test("movement checks narrow obstacles along the entire path", () => {
+  const g = flat();
+  g.ground[103] = 260;
+  assert.equal(g.move(1), false);
+  assert.equal(g.active.moves, 4);
+});
+test("movement follows sloping ground continuously and stops at exact endpoint", () => {
+  const g = flat();
+  for (let x = 60; x < 140; x++) g.ground[x] = 330 - (x - 60) * 0.35;
+  g.active.y = g.support(g.active.x);
+  g.move(1);
+  let previous = g.active.x,
+    y = g.active.y;
+  for (let i = 0; i < 100; i++) {
+    g.update(STEP);
+    assert.ok(g.active.x >= previous && g.active.x - previous < 1);
+    assert.ok(Math.abs(g.active.y - y) < 1);
+    assert.ok(Math.abs(g.active.y - g.support(g.active.x)) < 0.001);
+    previous = g.active.x;
+    y = g.active.y;
+  }
+  assert.equal(g.active.x, 115);
+});
+test("ballistic integration matches analytic gravity and wind at multiple frame rates", () => {
+  for (const dt of [1 / 30, 1 / 60, STEP]) {
+    const t = { x: 90, y: 326, angle: 51, power: 63 },
+      start = launch(t),
+      p = { ...start };
+    for (let i = 0; i < Math.round(2 / dt); i++) ballisticStep(p, dt, 35);
+    assert.ok(
+      Math.abs(p.x - (start.x + start.vx * 2 + 0.5 * 35 * 0.18 * 4)) < 1e-8,
+    );
+    assert.ok(
+      Math.abs(p.y - (start.y + start.vy * 2 + 0.5 * GRAVITY * 4)) < 1e-8,
+    );
+  }
+});
+test("prediction and actual first impact agree across wind, slopes, both tanks and downward angles", () => {
+  for (const type of ["plains", "mountain", "cliff"])
+    for (const wind of [-40, 0, 40])
+      for (const side of [0, 1])
+        for (const [angle, power] of [
+          [0, 10],
+          [28, 72],
+          [51, 44],
+          [90, 55],
+          [135, 69],
+          [180, 80],
+          [270, 50],
+          [350, 100],
+        ]) {
+          const g = new Game({
+            seed: 17,
+            type,
+            wind,
+            practice: true,
+            kick: false,
+          });
+          g.turn = side;
+          const predicted = predict(g, g.active, angle, power);
+          let impact = null;
+          g.impact = (p) => {
+            impact = { x: p.x, y: p.y };
+          };
+          g.aim(angle, power);
+          g.fire("single");
+          for (let i = 0; i < 1700 && g.projectiles.length; i++) g.update(STEP);
+          if (!predicted.out) {
+            assert.ok(
+              impact,
+              JSON.stringify({ type, wind, side, angle, power, predicted }),
+            );
+            assert.ok(
+              Math.hypot(impact.x - predicted.x, impact.y - predicted.y) < 1e-7,
+            );
+          } else
+            assert.equal(
+              impact,
+              null,
+              "out of arena prediction must match actual miss",
+            );
+        }
+});
+test("zero wind equal-height range and mirrored launch directions are symmetric", () => {
+  const t = { x: 400, y: 300, power: 60 };
+  const left = launch(t, 135),
+    right = launch(t, 45);
+  for (let i = 0; i < 200; i++) {
+    ballisticStep(left, STEP, 0);
+    ballisticStep(right, STEP, 0);
+  }
+  assert.ok(Math.abs(left.x + right.x - 800) < 1e-8);
+  assert.ok(Math.abs(left.y - right.y) < 1e-8);
 });

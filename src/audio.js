@@ -24,7 +24,17 @@ export class Audio {
     osc.connect(gain);
     gain.connect(c.destination);
     let duration = 0.12;
-    if (kind === "fire") {
+    if (kind === "move") {
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(38, now);
+      osc.frequency.linearRampToValueAtTime(65, now + 0.18);
+      osc.frequency.linearRampToValueAtTime(38, now + 0.65);
+      duration = 0.7;
+    } else if (kind === "detent") {
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(240, now);
+      duration = 0.018;
+    } else if (kind === "fire") {
       osc.type = "sawtooth";
       osc.frequency.setValueAtTime(180, now);
       osc.frequency.exponentialRampToValueAtTime(40, now + 0.18);

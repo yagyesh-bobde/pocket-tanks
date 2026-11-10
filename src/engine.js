@@ -1,8 +1,43 @@
 import { WEAPONS, weaponById } from "./weapons.js";
 export const WIDTH = 800,
   SKY = 450,
-  GRAVITY = 110;
+  GRAVITY = 110,
+  STEP = 1 / 120,
+  BARREL = 16;
 export const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
+// Screen y points down; angles are absolute, counterclockwise from the right.
+export function launch(tank, angle = tank.angle, power = tank.power) {
+  const a = (angle * Math.PI) / 180,
+    speed = clamp(power, 0, 100) * 5.1;
+  return {
+    x: tank.x + Math.cos(a) * BARREL,
+    y: tank.y - 5 - Math.sin(a) * BARREL,
+    vx: Math.cos(a) * speed,
+    vy: -Math.sin(a) * speed,
+  };
+}
+export function ballisticStep(p, dt, wind, gravity = GRAVITY) {
+  // Exact constant-acceleration integration, shared by prediction and live fire.
+  p.x += p.vx * dt + 0.5 * wind * 0.18 * dt * dt;
+  p.y += p.vy * dt + 0.5 * gravity * dt * dt;
+  p.vx += wind * 0.18 * dt;
+  p.vy += gravity * dt;
+}
+export function sweep(game, p, x0, y0) {
+  const n =
+    Math.ceil(Math.max(Math.abs(p.x - x0), Math.abs(p.y - y0)) / 2) || 1;
+  for (let i = 1; i <= n; i++) {
+    const x = x0 + ((p.x - x0) * i) / n,
+      y = y0 + ((p.y - y0) * i) / n;
+    if (x < 0 || x > 799 || y > 455) return { x, y, out: true };
+    const tank = game.tanks.findIndex(
+      (t, j) =>
+        (j !== p.owner || p.age > 0.22) && Math.hypot(x - t.x, y - t.y) < 8,
+    );
+    if ((y >= 0 && y >= game.surface(x)) || tank >= 0) return { x, y, tank };
+  }
+  return null;
+}
 export function random(seed = 1) {
   let a = seed >>> 0;
   return () => {
@@ -96,6 +131,7 @@ export class Game {
     this.phase = "aiming";
     this.time = 0;
     this.projectiles = [];
+    this.nextProjectileId = 1;
     this.effects = [];
     this.labels = [];
     this.pending = [];
@@ -104,6 +140,7 @@ export class Game {
     this.quiet = 0;
     this.history = [];
     this.selected = 0;
+    this.movement = null;
   }
   get active() {
     return this.tanks[this.turn];
@@ -112,9 +149,17 @@ export class Game {
     return this.ground[clamp(Math.round(x), 0, 799)];
   }
   flatten(x, r) {
-    const y = this.surface(x);
-    for (let i = Math.max(0, Math.floor(x - r)); i <= Math.min(799, x + r); i++)
-      this.ground[i] = y;
+    const y = this.surface(x),
+      shoulder = 16;
+    for (
+      let i = Math.max(0, Math.floor(x - r - shoulder));
+      i <= Math.min(799, x + r + shoulder);
+      i++
+    ) {
+      const u = clamp((Math.abs(i - x) - r) / shoulder, 0, 1),
+        blend = u * u * (3 - 2 * u);
+      this.ground[i] = y * (1 - blend) + this.ground[i] * blend;
+    }
   }
   emit(type, data = {}) {
     this.events.push({ type, ...data });
@@ -147,43 +192,105 @@ export class Game {
       this.ground[i] = clamp(Math.min(this.ground[i], top), 62, 440);
     }
   }
-  settle() {
+  support(x) {
+    const at = (xx) => {
+      const lo = clamp(Math.floor(xx), 0, 799),
+        hi = Math.min(799, lo + 1);
+      return (
+        this.ground[lo] +
+        (this.ground[hi] - this.ground[lo]) * clamp(xx - lo, 0, 1)
+      );
+    };
+    return Math.min(at(x - 5), at(x), at(x + 5)) - 4;
+  }
+  settle(dt) {
     for (const t of this.tanks) {
-      const support =
-        Math.min(
-          this.surface(t.x - 5),
-          this.surface(t.x),
-          this.surface(t.x + 5),
-        ) - 4;
-      if (t.y < support) t.y = Math.min(support, t.y + 5);
+      if (this.movement && t === this.active) continue;
+      const support = this.support(t.x);
+      if (t.y < support) {
+        t.fallVelocity = (t.fallVelocity ?? 0) + 240 * dt;
+        t.y = Math.min(support, t.y + t.fallVelocity * dt);
+      } else t.fallVelocity = 0;
       t.x = clamp(t.x, 12, 788);
     }
   }
   move(dir) {
-    if (this.phase !== "aiming" || this.active.moves <= 0) return false;
+    if (
+      this.phase !== "aiming" ||
+      this.active.moves <= 0 ||
+      ![-1, 1].includes(dir)
+    )
+      return false;
     const t = this.active,
       nx = clamp(t.x + dir * 25, 14, 786);
     if (
       nx === t.x ||
       this.surface(t.x) < t.y - 8 ||
+      Math.abs(t.y - this.support(t.x)) > 2 ||
       Math.abs(this.surface(nx) - this.surface(t.x)) > 28 ||
       Math.abs(nx - this.tanks[1 - this.turn].x) < 25
     )
       return false;
-    t.x = nx;
-    t.y = this.surface(nx) - 4;
+    // Check the whole path, including narrow walls and tanks between endpoints.
+    for (let x = t.x; dir > 0 ? x <= nx : x >= nx; x += dir) {
+      if (
+        Math.abs(this.surface(x) - this.surface(t.x)) > 28 ||
+        Math.abs(this.surface(x + dir) - this.surface(x)) > 6 ||
+        Math.abs(x - this.tanks[1 - this.turn].x) < 25
+      )
+        return false;
+    }
+    this.movement = { from: t.x, to: nx, elapsed: 0, duration: 0.7, dust: 0 };
+    this.phase = "moving";
     t.moves--;
     this.emit("move");
     return true;
   }
+  advanceMovement(dt) {
+    const m = this.movement;
+    if (!m) return;
+    m.elapsed = Math.min(m.duration, m.elapsed + dt);
+    const u = m.elapsed / m.duration,
+      ease = u * u * (3 - 2 * u),
+      t = this.active,
+      previous = t.x;
+    t.x = m.from + (m.to - m.from) * ease;
+    t.y = this.support(t.x);
+    t.tread = (t.tread ?? 0) + (t.x - previous);
+    m.dust += Math.abs(t.x - previous);
+    if (m.dust > 3) {
+      m.dust = 0;
+      this.effects.push({
+        kind: "treadDust",
+        x: t.x - Math.sign(m.to - m.from) * 9,
+        y: t.y + 5,
+        life: 0.35,
+        max: 0.35,
+      });
+      this.emit("tread");
+    }
+    if (m.elapsed >= m.duration) {
+      t.x = m.to;
+      t.fallVelocity = 0;
+      this.movement = null;
+      this.phase = "aiming";
+      this.emit("moved");
+    }
+  }
   aim(angle, power) {
-    if (this.phase !== "aiming") return;
+    if (
+      this.phase !== "aiming" ||
+      !Number.isFinite(angle) ||
+      !Number.isFinite(power)
+    )
+      return;
     this.active.angle = ((Math.round(angle) % 360) + 360) % 360;
     this.active.power = clamp(Math.round(power), 0, 100);
   }
   spawn(id, x, y, vx, vy, extra = {}) {
     const w = weaponById[id];
     const p = {
+      serial: this.nextProjectileId++,
       id,
       x,
       y,
@@ -213,8 +320,7 @@ export class Game {
     const t = this.active,
       a = (t.angle * Math.PI) / 180,
       speed = t.power * 5.1,
-      x = t.x + Math.cos(a) * 15,
-      y = t.y - 5 - Math.sin(a) * 15;
+      { x, y } = launch(t);
     if (!this.practice) t.inventory.splice(t.inventory.indexOf(id), 1);
     t.shots++;
     this.selected = 0;
@@ -580,10 +686,7 @@ export class Game {
         return false;
       }
     }
-    p.vx += this.wind * 0.18 * dt;
-    p.vy += (p.gravity ?? GRAVITY) * dt;
-    p.x += p.vx * dt;
-    p.y += p.vy * dt;
+    ballisticStep(p, dt, this.wind, p.gravity ?? GRAVITY);
     if (p.kind === "liquid") {
       if (p.x < 1 || p.x > 798) {
         p.vx *= -0.6;
@@ -607,23 +710,12 @@ export class Game {
       }
       return true;
     }
-    // Sweep at <=2 pixel spacing, so fast shells cannot tunnel through tanks or terrain.
-    const steps =
-      Math.ceil(Math.max(Math.abs(p.x - p.px), Math.abs(p.y - p.py)) / 2) || 1;
-    for (let i = 1; i <= steps; i++) {
-      const x = p.px + ((p.x - p.px) * i) / steps,
-        y = p.py + ((p.y - p.py) * i) / steps;
-      if (x < 0 || x > 799 || y > 455) return false;
-      const hitTank = this.tanks.some(
-        (t, j) =>
-          (j !== p.owner || p.age > 0.22) && Math.hypot(x - t.x, y - t.y) < 8,
-      );
-      if ((y >= 0 && y >= this.surface(x)) || hitTank) {
-        p.x = x;
-        p.y = y;
-        this.impact(p);
-        return false;
-      }
+    const hit = sweep(this, p, p.px, p.py);
+    if (hit) {
+      p.x = hit.x;
+      p.y = hit.y;
+      if (!hit.out) this.impact(p);
+      return false;
     }
     if (
       p.trail.length === 0 ||
@@ -637,6 +729,7 @@ export class Game {
   update(dt) {
     if (this.phase === "finished") return;
     this.time += dt;
+    this.advanceMovement(dt);
     const due = this.pending.filter((e) => e.at <= this.time);
     this.pending = this.pending.filter((e) => e.at > this.time);
     for (const e of due) e.fn();
@@ -649,9 +742,14 @@ export class Game {
     this.effects = this.effects.filter((e) => e.life > 0);
     for (const e of this.labels) e.life -= dt;
     this.labels = this.labels.filter((e) => e.life > 0);
-    this.settle();
+    this.settle(dt);
     if (this.phase === "firing") {
-      if (!this.projectiles.length && !this.pending.length) this.quiet += dt;
+      if (
+        !this.projectiles.length &&
+        !this.pending.length &&
+        this.tanks.every((t) => t.y >= this.support(t.x) - 0.1)
+      )
+        this.quiet += dt;
       else this.quiet = 0;
       if (this.quiet > 0.85) this.finishTurn();
     }
@@ -691,31 +789,23 @@ export class Game {
     };
   }
 }
-// Simulates the same swept collision used by the game; CPU cannot shoot through hills.
+// Predict ordinary ballistic shells, including tank hits and shots leaving the arena.
+// Homing, fragmentation, bounces and digging intentionally change course later.
 export function predict(game, tank, angle, power) {
-  const a = (angle * Math.PI) / 180,
-    s = power * 5.1;
-  let x = tank.x + Math.cos(a) * 15,
-    y = tank.y - 5 - Math.sin(a) * 15,
-    vx = Math.cos(a) * s,
-    vy = -Math.sin(a) * s;
-  for (let t = 0; t < 12; t += 1 / 90) {
-    vx += (game.wind * 0.18) / 90;
-    vy += GRAVITY / 90;
-    const nx = x + vx / 90,
-      ny = y + vy / 90,
-      n = Math.ceil(Math.max(Math.abs(nx - x), Math.abs(ny - y)) / 2) || 1;
-    for (let k = 1; k <= n; k++) {
-      const xx = x + ((nx - x) * k) / n,
-        yy = y + ((ny - y) * k) / n;
-      if (xx < 0 || xx > 799 || yy > 450)
-        return { x: clamp(xx, 0, 799), y: yy };
-      if (yy >= game.surface(xx)) return { x: xx, y: yy };
-    }
-    x = nx;
-    y = ny;
+  const p = {
+    ...launch(tank, angle, power),
+    owner: game.tanks.indexOf(tank),
+    age: 0,
+  };
+  for (let i = 0; i < 14 / STEP; i++) {
+    const x = p.x,
+      y = p.y;
+    p.age += STEP;
+    ballisticStep(p, STEP, game.wind);
+    const hit = sweep(game, p, x, y);
+    if (hit) return hit;
   }
-  return { x, y };
+  return { x: p.x, y: p.y };
 }
 export function cpuAim(game, difficulty = "normal") {
   const tank = game.active,

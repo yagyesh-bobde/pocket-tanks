@@ -6,6 +6,8 @@ import { Game, cpuAim, draftPool, hashSeed, random, clamp } from "./engine.js";
 import { WEAPONS, weaponById } from "./weapons.js";
 import { Renderer } from "./render.js";
 import { Audio } from "./audio.js";
+import { angleWheel, bindAiming } from "./controls.js";
+import { Room, cleanCode, gamePacket } from "./network.js";
 
 const $ = (s) => document.querySelector(s),
   escape = (s) =>
@@ -66,6 +68,21 @@ let prefs = read("pt-prefs", {
   toastTimer = null,
   endSaved = false;
 let titleFixture = false;
+let room = null,
+  epoch = 0,
+  commandSeq = 0,
+  remoteSeq = 0,
+  packetSeq = 0,
+  seenPacket = 0,
+  latestAimSeq = 0,
+  networkEvents = [],
+  lastNetworkSend = 0,
+  pendingGuest = false;
+const online = () => mode === "online" && !!room;
+const host = () => room?.role === "host";
+const ownTurn = () =>
+  !online() || (room.connected && game?.turn === (host() ? 0 : 1));
+
 let matchSeed = hashSeed(Date.now()),
   saved = read("pt-match", null),
   scores = read("pt-scores", []);
@@ -104,7 +121,7 @@ function draw() {
   const champion = scores[0];
   renderer.draw({
     screen,
-    game,
+    game: renderGame(),
     paused,
     playerNames: titleFixture
       ? ["Mike", "Sarah"]
@@ -163,6 +180,10 @@ function finishSetup() {
   }
 }
 function choose(key) {
+  if (online()) {
+    sendCommand("pick", { key });
+    return;
+  }
   if (screen !== "draft" || (mode === "cpu" && draftTurn === 1)) return;
   pick(key);
 }
@@ -188,6 +209,10 @@ function pick(key) {
   }
 }
 function randomDraft() {
+  if (online() && !host()) {
+    toast("The host can randomize the draft.");
+    return;
+  }
   clearTimeout(cpuTimer);
   const rng = random(matchSeed + draft.length);
   while (draft.length) {
@@ -220,6 +245,7 @@ function startBattle() {
   );
 }
 function saveMatch() {
+  if (online()) return;
   if (!game || game.phase !== "aiming" || game.practice) return;
   const data = {
     seed: game.seed,
@@ -270,11 +296,21 @@ function canPlay() {
     game?.phase === "aiming" &&
     !paused &&
     !helpOpen &&
-    !(mode === "cpu" && game.turn === 1)
+    !(mode === "cpu" && game.turn === 1) &&
+    ownTurn() &&
+    !pendingGuest
   );
 }
 function fire() {
   if (!canPlay() || weaponOpen) return;
+  if (online()) {
+    sendCommand("fire", {
+      weapon: list()[selected],
+      angle: game.active.angle,
+      power: game.active.power,
+    });
+    return;
+  }
   game.selected = selected;
   if (game.fire(list()[selected])) {
     selected = 0;
@@ -283,9 +319,11 @@ function fire() {
 }
 function move(dir) {
   if (!canPlay()) return;
+  if (online()) {
+    sendCommand("move", { dir });
+    return;
+  }
   if (game.move(dir)) {
-    audio.sound("click");
-    saveMatch();
     renderHUD();
     draw();
   } else
@@ -295,15 +333,51 @@ function move(dir) {
         : "No moves left this match.",
     );
 }
+let lastDetent = 0;
+function haptic(pattern) {
+  if (prefs.haptics !== false) navigator.vibrate?.(pattern);
+}
+function syncAimValues() {
+  if (!game) return;
+  const t = game.active;
+  for (const id of ["angle", "power", "power-slider"]) {
+    const el = $("#" + id);
+    if (el && document.activeElement !== el)
+      el.value = id === "angle" ? t.angle : t.power;
+  }
+  $("#power-slider")?.style.setProperty("--power", t.power + "%");
+  document.querySelectorAll("[data-angle-wheel]").forEach((el) => {
+    el.setAttribute("aria-valuenow", t.angle);
+    el.setAttribute("aria-valuetext", t.angle + " degrees");
+    el.querySelector(".wheel-ticks").style.backgroundPositionX =
+      -t.angle * 2 + "px";
+  });
+  const outputs = touchControls.querySelectorAll("output");
+  if (outputs[0]) outputs[0].textContent = t.angle + "°";
+  if (outputs[1]) outputs[1].textContent = t.power;
+}
+function setAim(angle, power) {
+  if (!canPlay() || !Number.isFinite(angle) || !Number.isFinite(power)) return;
+  const prev = game.active.angle;
+  game.aim(angle, power);
+  if (online())
+    sendCommand("aim", { angle: game.active.angle, power: game.active.power });
+  if (prev !== game.active.angle && performance.now() - lastDetent > 65) {
+    lastDetent = performance.now();
+    audio.sound("detent");
+    haptic(4);
+  }
+  syncAimValues();
+  draw();
+}
 function aim(da, dp) {
   if (!canPlay()) return;
-  game.aim(game.active.angle + da, game.active.power + dp);
-  renderHUD();
-  draw();
+  setAim(game.active.angle + da, game.active.power + dp);
 }
 function cycle(dir) {
   if (!canPlay()) return;
   selected = (selected + dir + list().length) % list().length;
+  if (online()) sendCommand("select", { selected });
   renderHUD();
   if (weaponOpen) renderOverlay();
 }
@@ -355,19 +429,287 @@ function finishMatch() {
       .sort((a, b) => Math.max(...b.scores) - Math.max(...a.scores))
       .slice(0, 5);
     write("pt-scores", scores);
-    write("pt-match", null);
-    saved = null;
+    if (!online()) {
+      write("pt-match", null);
+      saved = null;
+    }
   }
   go("end");
   audio.sound("end");
 }
+function renderGame() {
+  if (!online() || host() || !game) return game;
+  const view = Object.create(game);
+  view.tanks = game.tanks.map((t) => ({
+    ...t,
+    x: t.visualX ?? t.x,
+    y: t.visualY ?? t.y,
+  }));
+  view.projectiles = game.projectiles.map((p) => ({
+    ...p,
+    x: p.visualX ?? p.x,
+    y: p.visualY ?? p.y,
+  }));
+  return view;
+}
+function inviteLink() {
+  const u = new URL(location.href);
+  u.searchParams.delete("review");
+  u.hash = "join=" + room.code;
+  return u.href;
+}
+function leaveRoom() {
+  room?.close();
+  room = null;
+  pendingGuest = false;
+  networkEvents = [];
+  if (mode === "online") {
+    mode = "local";
+    game = null;
+  }
+  if (location.hash)
+    history.replaceState(null, "", location.pathname + location.search);
+}
+function renderNetwork(p) {
+  const joined = new URLSearchParams(location.hash.slice(1)).get("join") || "";
+  const state = room?.status;
+  p.innerHTML = `<section class="network-panel"><h1 class="chrome">PLAY TOGETHER</h1><p>Two devices. One battlefield.</p>${!room ? `<label>Your name<input id="network-name" maxlength="12" value="${escape(prefs.names[0])}" autocomplete="nickname"></label><button class="metal-button" data-action="host-room">CREATE ROOM</button><div class="join-row"><label>Room code<input id="room-code" maxlength="8" placeholder="ABC123" value="${escape(cleanCode(joined))}" autocapitalize="characters" spellcheck="false" autocomplete="off"></label><button class="metal-button" data-action="join-room">JOIN ROOM</button></div><p class="network-note">Open this game on both devices. Share the six-character code or invite link. Works on the same Wi-Fi; internet play depends on your network.</p>` : `<p class="room-state" role="status">${state === "connected" ? "CONNECTED · " + escape(host() ? room.remoteName : room.name) : state === "waiting" ? "WAITING FOR PLAYER 2" : state === "connecting" ? "CONNECTING…" : "CONNECTION PROBLEM"}</p><div class="room-code" data-testid="room-code">${room.code}</div><p>${escape(room.reason || (host() ? "Your friend is ready. Start when you are." : "The host will start the weapon draft."))}</p>${host() ? '<button class="metal-button" data-action="copy-room">COPY INVITE LINK</button>' : ""}${host() && room.connected ? '<button class="gold" data-action="start-online">START MATCH</button>' : ""}${["error", "disconnected"].includes(state) ? '<button class="metal-button" data-action="retry-room">RETRY CONNECTION</button><button class="metal-button" data-action="edit-room">EDIT ROOM</button>' : ""}<p class="network-note">Keep the host tab open and visible. A disconnected player can rejoin from their original tab.</p>`}<button class="back" data-action="menu">← ${room ? "Leave room" : "Back"}</button></section>`;
+}
+function startRoom(role, code) {
+  const name = $("#network-name")?.value || room?.name || prefs.names[0];
+  code = code || $("#room-code")?.value || "";
+  room?.close();
+  epoch = 0;
+  commandSeq = 0;
+  remoteSeq = 0;
+  seenPacket = 0;
+  packetSeq = 0;
+  pendingGuest = false;
+  game = null;
+  room = new Room({
+    onStatus: () => {
+      if (screen === "network") render();
+      else {
+        renderHUD();
+        renderOverlay();
+      }
+    },
+    onConnect: () => {
+      if (host()) {
+        prefs.names = [room.name, room.remoteName];
+        if (screen === "network") render();
+        broadcast();
+      }
+    },
+    onDisconnect: () => {
+      pendingGuest = false;
+      renderHUD();
+      renderOverlay();
+    },
+    onData: (data) => {
+      if (host()) {
+        if (data.kind === "command") receiveCommand(data);
+      } else if (data.kind === "state") receiveState(data);
+      else if (data.kind === "notice") toast(data.text);
+    },
+  });
+  mode = "online";
+  go("network");
+  room.start(role, code, name);
+}
+function sendCommand(type, data = {}) {
+  if (!online() || !room.connected) return;
+  const serial = screen === "draft" ? 20 - draft.length : game?.history.length;
+  if (host()) {
+    applyCommand(type, data, 0);
+    if (type !== "aim") broadcast();
+  } else {
+    const seq = ++commandSeq;
+    if (type === "aim") latestAimSeq = seq;
+    room.send({ kind: "command", epoch, serial, seq, type, data });
+    if (["move", "fire", "pick"].includes(type)) {
+      pendingGuest = true;
+      renderHUD();
+    }
+  }
+}
+function receiveCommand(c) {
+  if (
+    c.epoch !== epoch ||
+    !Number.isSafeInteger(c.seq) ||
+    c.seq <= remoteSeq ||
+    !c.data ||
+    typeof c.data !== "object"
+  )
+    return;
+  remoteSeq = c.seq;
+  const serial = screen === "draft" ? 20 - draft.length : game?.history.length;
+  if (c.serial === serial) applyCommand(c.type, c.data, 1);
+  if (c.type !== "aim") broadcast();
+}
+function applyCommand(type, d, player) {
+  if (!room.connected) return;
+  if (type === "pick") {
+    if (screen === "draft" && draftTurn === player && Number.isInteger(d.key))
+      pick(d.key);
+    return;
+  }
+  if (screen !== "battle" || game?.phase !== "aiming" || game.turn !== player)
+    return;
+  if (type === "aim" && Number.isFinite(d.angle) && Number.isFinite(d.power)) {
+    game.aim(d.angle, d.power);
+    syncAimValues();
+  }
+  if (
+    type === "select" &&
+    Number.isInteger(d.selected) &&
+    d.selected >= 0 &&
+    d.selected < list().length
+  ) {
+    selected = d.selected;
+    renderHUD();
+  }
+  if (type === "move" && [-1, 1].includes(d.dir)) {
+    if (!game.move(d.dir)) {
+      if (player === 0)
+        toast("That move is blocked by terrain, burial, or another tank.");
+      else
+        room.send({
+          kind: "notice",
+          text: "That move is blocked by terrain, burial, or another tank.",
+        });
+    }
+    renderHUD();
+  }
+  if (
+    type === "fire" &&
+    typeof d.weapon === "string" &&
+    Number.isFinite(d.angle) &&
+    Number.isFinite(d.power)
+  ) {
+    game.aim(d.angle, d.power);
+    if (game.fire(d.weapon)) {
+      selected = 0;
+      weaponOpen = false;
+      renderHUD();
+      renderOverlay();
+    }
+  }
+}
+function broadcast() {
+  if (!online() || !host() || !room.connected) return;
+  lastNetworkSend = performance.now();
+  room.send({
+    kind: "state",
+    seq: ++packetSeq,
+    epoch,
+    ack: remoteSeq,
+    screen,
+    selected,
+    matchSeed,
+    names: prefs.names,
+    colors: prefs.colors,
+    draft,
+    inventories,
+    draftTurn,
+    game: gamePacket(game),
+    events: networkEvents.splice(0),
+  });
+}
+function receiveState(data) {
+  if (
+    !Number.isSafeInteger(data.seq) ||
+    data.seq <= seenPacket ||
+    !["network", "draft", "battle", "end"].includes(data.screen)
+  )
+    return;
+  seenPacket = data.seq;
+  const signature = () =>
+    [
+      screen,
+      epoch,
+      game?.phase,
+      game?.turn,
+      game?.history.length,
+      selected,
+      pendingGuest,
+      draft.length,
+    ].join(":");
+  const before = signature();
+  const oldProjectiles = new Map(
+    game?.projectiles.map((p) => [p.serial, p]) ?? [],
+  );
+  const oldTanks = game?.tanks,
+    oldAim = game?.active,
+    oldHistoryLength = game?.history.length;
+  epoch = data.epoch;
+  prefs.names = data.names;
+  prefs.colors = data.colors;
+  matchSeed = data.matchSeed;
+  draft = data.draft;
+  inventories = data.inventories;
+  draftTurn = data.draftTurn;
+  selected = data.selected;
+  pendingGuest = false;
+  if (data.game) {
+    const g = data.game;
+    if (!game) game = new Game({ seed: g.seed, players: g.tanks });
+    Object.assign(game, g, {
+      ground: Float64Array.from(g.ground),
+      pending: [],
+      events: [],
+    });
+    game.projectiles.forEach((p) => {
+      const old = oldProjectiles.get(p.serial);
+      p.visualX = old?.visualX ?? old?.x ?? p.x;
+      p.visualY = old?.visualY ?? old?.y ?? p.y;
+    });
+    game.tanks.forEach((t, i) => {
+      const old = oldTanks?.[i];
+      t.visualX = old?.visualX ?? old?.x ?? t.x;
+      t.visualY = old?.visualY ?? old?.y ?? t.y;
+    });
+    if (
+      g.phase === "aiming" &&
+      g.turn === 1 &&
+      data.ack < latestAimSeq &&
+      oldAim &&
+      oldHistoryLength === g.history.length
+    ) {
+      game.active.angle = oldAim.angle;
+      game.active.power = oldAim.power;
+    }
+  } else game = null;
+  const changedScreen = screen !== data.screen;
+  screen = data.screen;
+  if (changedScreen) {
+    paused = false;
+    helpOpen = false;
+    weaponOpen = false;
+    render();
+  } else if (before !== signature()) {
+    if (screen === "battle") {
+      renderHUD();
+      renderOverlay();
+    } else render();
+  } else syncAimValues();
+  for (const e of data.events || []) {
+    if (["fire", "blast", "move", "turn", "end"].includes(e.type))
+      audio.sound(e.type, e.radius);
+    if (e.type === "tread" && game?.turn === 1) haptic(9);
+  }
+  draw();
+}
+
 function render() {
+  $("#app").classList.toggle("network-view", screen === "network");
   const p = $("#panel");
   p.innerHTML = "";
   if (screen === "title")
     p.innerHTML = `<button class="splash-hit" data-action="title" aria-label="Click to start"></button><button class="start-text" data-action="title">Click to Start</button><div class="splash-copy"><div class="chrome">AN OPEN-SOURCE TRIBUTE TO<br>POCKET TANKS</div><div class="chrome">THE ULTIMATE ONE-ON-ONE<br>ARTILLERY GAME</div><button class="chrome" data-action="title">PLAY IN YOUR WEB BROWSER<br>FREE AND OPEN SOURCE</button></div><div class="title-credits">Original web remake · MIT License <span>Game concept © Blitwise Productions</span></div>`;
   if (screen === "menu")
-    p.innerHTML = `<h1 class="chrome">POCKET TANKS</h1><div class="main-menu">${saved ? '<button class="gold" data-action="resume">RESUME MATCH</button>' : ""}<button class="chrome" data-mode="cpu">1 PLAYER</button><button class="chrome" data-mode="local">2 PLAYERS</button><button class="chrome" data-mode="practice">TARGET PRACTICE</button><button class="chrome small" data-action="options">OPTIONS</button></div><div class="menu-note">Choose your angle. Set your power. Make every shot count.</div>`;
+    p.innerHTML = `<h1 class="chrome">POCKET TANKS</h1><div class="main-menu">${saved ? '<button class="gold" data-action="resume">RESUME MATCH</button>' : ""}<button class="chrome" data-mode="cpu">1 PLAYER</button><button class="chrome" data-mode="local">2 PLAYERS</button><button class="chrome" data-mode="practice">TARGET PRACTICE</button><button class="chrome network-menu-button" data-action="network">ONLINE / WI-FI</button><button class="chrome small" data-action="options">OPTIONS</button></div><div class="menu-note">Choose your angle. Set your power. Make every shot count.</div>`;
+  if (screen === "network") renderNetwork(p);
   if (screen === "setup") {
     const n = setupPlayer,
       color = prefs.colors[n];
@@ -376,27 +718,28 @@ function render() {
   }
   if (screen === "draft") {
     const ns = names();
-    p.innerHTML = `<h1 class="chrome shop-heading">WEAPON SHOP</h1><div class="shop-instruction">${mode === "cpu" && draftTurn === 1 ? "Computer is choosing…" : "Select a Weapon:"}</div>${ns.map((t, i) => `<section class="draft-side side-${i}" style="--color:${t.color}"><h2>${escape(t.name.toUpperCase())}</h2><ol>${inventories[i].map((id) => `<li>${escape(weaponById[id].name)}</li>`).join("")}</ol><small>${inventories[i].length} / 10</small></section>`).join("")}<div class="pick-arrow ${draftTurn ? "right" : ""}"><span>PICK<br>ONE</span><b>${draftTurn ? "➜" : "⬅"}</b></div><div class="shop-weapons">${draft
+    p.innerHTML = `<h1 class="chrome shop-heading">WEAPON SHOP</h1><div class="shop-instruction">${mode === "cpu" && draftTurn === 1 ? "Computer is choosing…" : online() && draftTurn !== (host() ? 0 : 1) ? "Your friend is choosing…" : "Select a Weapon:"}</div>${ns.map((t, i) => `<section class="draft-side side-${i}" style="--color:${t.color}"><h2>${escape(t.name.toUpperCase())}</h2><ol>${inventories[i].map((id) => `<li>${escape(weaponById[id].name)}</li>`).join("")}</ol><small>${inventories[i].length} / 10</small></section>`).join("")}<div class="pick-arrow ${draftTurn ? "right" : ""}"><span>PICK<br>ONE</span><b>${draftTurn ? "➜" : "⬅"}</b></div><div class="shop-weapons">${draft
       .map((w) => {
         const item = weaponById[w.id];
-        return `<button data-pick="${w.key}" title="${escape(item.description)}" ${mode === "cpu" && draftTurn === 1 ? "disabled" : ""}><i class="weapon-icon" style="--icon:${item.color}">${item.icon}</i>${escape(item.name)}</button>`;
+        return `<button data-pick="${w.key}" title="${escape(item.description)}" ${(mode === "cpu" && draftTurn === 1) || (online() && (!room.connected || draftTurn !== (host() ? 0 : 1))) ? "disabled" : ""}><i class="weapon-icon" style="--icon:${item.color}">${item.icon}</i>${escape(item.name)}</button>`;
       })
       .join(
         "",
-      )}</div><button class="metal-button random" data-action="random">Random</button><button class="back" data-action="menu">← Back</button>`;
+      )}</div><button class="metal-button random" data-action="random" ${online() && !host() ? "disabled" : ""}>Random</button><button class="back" data-action="menu">← Back</button>`;
   }
   if (screen === "options")
-    p.innerHTML = `<h1 class="chrome">OPTIONS</h1><div class="options-form"><label>Terrain<select id="terrain"><option value="mountain">Mountains</option><option value="valley">Valley</option><option value="cliff">Cliff</option><option value="plains">Plains</option></select></label><label>Wind<select id="wind"><option value="off">Off · classic default</option><option value="on">On · changes each turn</option></select></label><label>Computer<select id="option-difficulty"><option value="easy">Easy</option><option value="normal">Normal</option><option value="hard">Hard</option></select></label><p>Ten volleys · four moves per tank<br>Self-hits subtract from your score</p></div><button class="gold continue" data-action="save-options">CONTINUE</button>`;
+    p.innerHTML = `<h1 class="chrome">OPTIONS</h1><div class="options-form"><label>Terrain<select id="terrain"><option value="mountain">Mountains</option><option value="valley">Valley</option><option value="cliff">Cliff</option><option value="plains">Plains</option></select></label><label>Wind<select id="wind"><option value="off">Off · classic default</option><option value="on">On · changes each turn</option></select></label><label>Vibration<select id="haptics"><option value="on">On · where supported</option><option value="off">Off</option></select></label><label>Computer<select id="option-difficulty"><option value="easy">Easy</option><option value="normal">Normal</option><option value="hard">Hard</option></select></label><p>Ten volleys · four moves per tank<br>Self-hits subtract from your score</p></div><button class="gold continue" data-action="save-options">CONTINUE</button>`;
   if (screen === "options") {
     $("#terrain").value = prefs.terrain;
     $("#wind").value = prefs.wind ? "on" : "off";
     $("#option-difficulty").value = prefs.difficulty;
+    $("#haptics").value = prefs.haptics === false ? "off" : "on";
   }
   if (screen === "end") {
     const [a, b] = game.tanks,
       drawn = a.score === b.score,
       winner = a.score > b.score ? a : b;
-    p.innerHTML = `<div class="results"><p class="eyebrow">TEN VOLLEYS COMPLETE</p><h1 class="gold">${drawn ? "A PERFECT TIE" : escape(winner.name.toUpperCase()) + " WINS!"}</h1><div class="scorecards">${game.tanks.map((t) => `<div style="--color:${t.color}"><strong>${escape(t.name)}</strong><b class="chrome">${t.score}</b><span>10 shots · ${t.moves} moves left</span></div>`).join("")}</div><div class="result-details"><span>Best shot</span><strong>${bestShot()}</strong></div><div class="result-actions"><button class="metal-button" data-action="rematch">Play Again</button><button class="metal-button" data-action="new">New Match</button><button class="metal-button" data-action="menu">Main Menu</button></div><button class="plain log-toggle" data-action="log">View shot-by-shot scorecard ↓</button><div id="shot-log" hidden>${game.history.map((h, i) => `<div>${i + 1}. ${escape(game.tanks[h.owner].name)} · ${weaponById[h.weapon].name}<b>${h.points > 0 ? "+" : ""}${h.points}</b></div>`).join("")}</div></div>`;
+    p.innerHTML = `<div class="results"><p class="eyebrow">TEN VOLLEYS COMPLETE</p><h1 class="gold">${drawn ? "A PERFECT TIE" : escape(winner.name.toUpperCase()) + " WINS!"}</h1><div class="scorecards">${game.tanks.map((t) => `<div style="--color:${t.color}"><strong>${escape(t.name)}</strong><b class="chrome">${t.score}</b><span>10 shots · ${t.moves} moves left</span></div>`).join("")}</div><div class="result-details"><span>Best shot</span><strong>${bestShot()}</strong></div><div class="result-actions"><button class="metal-button" data-action="rematch" ${online() && !host() ? "disabled" : ""}>${online() && !host() ? "Waiting for host" : "Play Again"}</button>${online() ? "" : '<button class="metal-button" data-action="new">New Match</button>'}<button class="metal-button" data-action="menu">Main Menu</button></div><button class="plain log-toggle" data-action="log">View shot-by-shot scorecard ↓</button><div id="shot-log" hidden>${game.history.map((h, i) => `<div>${i + 1}. ${escape(game.tanks[h.owner].name)} · ${weaponById[h.weapon].name}<b>${h.points > 0 ? "+" : ""}${h.points}</b></div>`).join("")}</div></div>`;
   }
   renderHUD();
   renderOverlay();
@@ -420,7 +763,7 @@ function renderHUD() {
     w = weapon(),
     disabled = !playing || !canPlay();
   touchControls.innerHTML = playing
-    ? `<div class="touch-number"><span>ANGLE</span><button data-touch="angle:1" aria-label="Touch increase angle" ${disabled ? "disabled" : ""}>＋</button><output>${t.angle}°</output><button data-touch="angle:-1" aria-label="Touch decrease angle" ${disabled ? "disabled" : ""}>−</button></div><div class="touch-number"><span>POWER</span><button data-touch="power:-1" aria-label="Touch decrease power" ${disabled ? "disabled" : ""}>−</button><output>${t.power}</output><button data-touch="power:1" aria-label="Touch increase power" ${disabled ? "disabled" : ""}>＋</button></div><select id="touch-weapon" aria-label="Touch weapon" ${disabled ? "disabled" : ""}>${list()
+    ? `<div class="touch-number touch-angle"><span>ANGLE</span><button data-touch="angle:1" aria-label="Touch increase angle" ${disabled ? "disabled" : ""}>＋</button><output>${t.angle}°</output><button data-touch="angle:-1" aria-label="Touch decrease angle" ${disabled ? "disabled" : ""}>−</button>${angleWheel(t.angle, disabled, true)}</div><div class="touch-number"><span>POWER</span><button data-touch="power:-1" aria-label="Touch decrease power" ${disabled ? "disabled" : ""}>−</button><output>${t.power}</output><button data-touch="power:1" aria-label="Touch increase power" ${disabled ? "disabled" : ""}>＋</button></div><select id="touch-weapon" aria-label="Touch weapon" ${disabled ? "disabled" : ""}>${list()
         .map(
           (id, i) =>
             `<option value="${i}" ${i === selected ? "selected" : ""}>${weaponById[id].name}</option>`,
@@ -429,15 +772,21 @@ function renderHUD() {
           "",
         )}</select><button class="touch-fire" data-touch="fire" ${disabled ? "disabled" : ""}>FIRE</button><div class="touch-moves"><button data-touch="move:-1" aria-label="Touch move left" ${disabled ? "disabled" : ""}>← MOVE</button><span>${t.moves} moves left</span><button data-touch="move:1" aria-label="Touch move right" ${disabled ? "disabled" : ""}>MOVE →</button></div>`
     : "";
-  h.innerHTML = `<div class="move-control"><button data-move="-1" aria-label="Move left" ${disabled ? "disabled" : ""}>❮❮</button><div><span>Move</span><b>${playing ? t.moves : ""}</b></div><button data-move="1" aria-label="Move right" ${disabled ? "disabled" : ""}>❯❯</button></div><button class="fire" data-action="fire" ${disabled ? "disabled" : ""}>Fire</button><div class="angle-control"><label for="angle">Angle</label><div><button data-adjust="angle:-1" aria-label="Decrease angle" ${disabled ? "disabled" : ""}>◀</button><input id="angle" aria-label="Angle in degrees" type="number" min="0" max="359" value="${playing ? t.angle : ""}" ${disabled ? "disabled" : ""}><span>°</span><button data-adjust="angle:1" aria-label="Increase angle" ${disabled ? "disabled" : ""}>▶</button></div></div><div class="weapon-control"><label>Weapon</label><button class="weapon-select" data-action="weapons" aria-label="Choose weapon" ${disabled ? "disabled" : ""}>${playing && w ? `<i class="weapon-icon" style="--icon:${w.color}">${w.icon}</i><span>${w.name}</span>` : ""}</button><div class="weapon-arrows"><button data-cycle="-1" aria-label="Previous weapon" ${disabled ? "disabled" : ""}>▲</button><button data-cycle="1" aria-label="Next weapon" ${disabled ? "disabled" : ""}>▼</button></div></div><div class="power-control"><input id="power-slider" type="range" aria-label="Shot power" min="0" max="100" value="${playing ? t.power : 0}" style="--power:${playing ? t.power : 0}%" ${disabled ? "disabled" : ""}><div><label for="power">Power</label><button data-adjust="power:-1" aria-label="Decrease power" ${disabled ? "disabled" : ""}>◀</button><input id="power" aria-label="Power" type="number" min="0" max="100" value="${playing ? t.power : ""}" ${disabled ? "disabled" : ""}><button data-adjust="power:1" aria-label="Increase power" ${disabled ? "disabled" : ""}>▶</button></div></div>${playing ? `<div class="turn-status" aria-live="polite">${game.phase === "firing" ? "SHOT IN FLIGHT" : mode === "cpu" && game.turn === 1 ? "COMPUTER THINKING" : escape(t.name.toUpperCase()) + "’S TURN"}<span>${game.practice ? "Unlimited arsenal" : t.inventory.length + " weapons left"}${game.surface(t.x) < t.y - 8 ? " · BURIED" : ""}</span></div><button class="battle-menu" data-action="pause" aria-label="Pause match">Ⅱ</button>` : ""}`;
+  h.innerHTML = `<div class="move-control"><button data-move="-1" aria-label="Move left" ${disabled ? "disabled" : ""}>❮❮</button><div><span>Move</span><b>${playing ? t.moves : ""}</b></div><button data-move="1" aria-label="Move right" ${disabled ? "disabled" : ""}>❯❯</button></div><button class="fire" data-action="fire" ${disabled ? "disabled" : ""}>Fire</button><div class="angle-control"><label for="angle">Angle</label><div><button data-adjust="angle:-1" aria-label="Decrease angle" ${disabled ? "disabled" : ""}>◀</button><input id="angle" aria-label="Angle in degrees" type="number" min="0" max="359" value="${playing ? t.angle : ""}" ${disabled ? "disabled" : ""}><span>°</span><button data-adjust="angle:1" aria-label="Increase angle" ${disabled ? "disabled" : ""}>▶</button></div>${angleWheel(playing ? t.angle : 0, disabled)}</div><div class="weapon-control"><label>Weapon</label><button class="weapon-select" data-action="weapons" aria-label="Choose weapon" ${disabled ? "disabled" : ""}>${playing && w ? `<i class="weapon-icon" style="--icon:${w.color}">${w.icon}</i><span>${w.name}</span>` : ""}</button><div class="weapon-arrows"><button data-cycle="-1" aria-label="Previous weapon" ${disabled ? "disabled" : ""}>▲</button><button data-cycle="1" aria-label="Next weapon" ${disabled ? "disabled" : ""}>▼</button></div></div><div class="power-control"><input id="power-slider" type="range" aria-label="Shot power" min="0" max="100" value="${playing ? t.power : 0}" style="--power:${playing ? t.power : 0}%" ${disabled ? "disabled" : ""}><div><label for="power">Power</label><button data-adjust="power:-1" aria-label="Decrease power" ${disabled ? "disabled" : ""}>◀</button><input id="power" aria-label="Power" type="number" min="0" max="100" value="${playing ? t.power : ""}" ${disabled ? "disabled" : ""}><button data-adjust="power:1" aria-label="Increase power" ${disabled ? "disabled" : ""}>▶</button></div></div>${playing ? `<div class="turn-status" aria-live="polite">${game.phase === "moving" ? "TANK MOVING" : game.phase === "firing" ? "SHOT IN FLIGHT" : mode === "cpu" && game.turn === 1 ? "COMPUTER THINKING" : online() && !ownTurn() ? escape(t.name.toUpperCase()) + " IS AIMING" : escape(t.name.toUpperCase()) + "’S TURN"}<span>${game.practice ? "Unlimited arsenal" : t.inventory.length + " weapons left"}${game.surface(t.x) < t.y - 8 ? " · BURIED" : ""}</span></div><button class="battle-menu" data-action="pause" aria-label="Pause match">Ⅱ</button>${online() ? `<div class="network-indicator">ROOM ${room.code} · You are ${escape(game.tanks[host() ? 0 : 1].name)}</div>` : ""}` : ""}`;
 }
 function renderOverlay() {
   const o = $("#overlay");
   o.innerHTML = "";
-  if (helpOpen)
-    o.innerHTML = `<div class="veil"><section class="dialog help-dialog"><button class="close" data-action="close-help" aria-label="Close help">×</button><h2 class="chrome">HOW TO PLAY</h2><p>Draft ten weapons each, then take turns firing. Earn points for hitting the other tank. Hitting yourself loses points. The highest score after ten volleys wins.</p><p><strong>Aim by eye.</strong> 0° points right, 90° up, 180° left. More power sends a shell farther. Watch the last shot’s arc to adjust.</p><p>Each tank has four moves for the whole match. Explosions reshape the hills. Dirt weapons can bury tanks; fire downward or use Dirt Mover to dig out.</p><div class="key-guide"><span>← / →</span><b>Increase / decrease angle</b><span>↑ / ↓</span><b>Increase / decrease power</b><span>A / Z</span><b>Previous / next weapon</b><span>, / .</span><b>Move left / right</b><span>Space</span><b>Fire</b><span>M · Esc</span><b>Mute · pause / menu</b></div><p class="help-small">Touch: tap the angle and power values, use their arrows, drag the red power bar, and tap Weapon to open your arsenal. Tap the battlefield to aim your turret.</p><button class="metal-button" data-action="close-help">Got it</button></section></div>`;
+  if (
+    online() &&
+    !room.connected &&
+    ["battle", "draft", "end"].includes(screen)
+  ) {
+    o.innerHTML = `<div class="veil"><section class="dialog"><h2 class="chrome">CONNECTION LOST</h2><p>${escape(room.reason || "Waiting for your friend to reconnect. The match is held.")}</p><p>Room <strong>${room.code}</strong> · keep the host tab open</p>${!host() ? '<button class="metal-button" data-action="retry-room">RECONNECT</button>' : ""}<button class="metal-button" data-action="menu">LEAVE ROOM</button></section></div>`;
+  } else if (helpOpen)
+    o.innerHTML = `<div class="veil"><section class="dialog help-dialog"><button class="close" data-action="close-help" aria-label="Close help">×</button><h2 class="chrome">HOW TO PLAY</h2><p>Draft ten weapons each, then take turns firing. Earn points for hitting the other tank. Hitting yourself loses points. The highest score after ten volleys wins.</p><p><strong>Aim by eye.</strong> 0° points right, 90° up, 180° left. More power sends a shell farther. Watch the last shot’s arc to adjust.</p><p>Each tank has four moves for the whole match. Explosions reshape the hills. Dirt weapons can bury tanks; fire downward or use Dirt Mover to dig out.</p><div class="key-guide"><span>← / →</span><b>Increase / decrease angle</b><span>↑ / ↓</span><b>Increase / decrease power</b><span>A / Z</span><b>Previous / next weapon</b><span>, / .</span><b>Move left / right</b><span>Space</span><b>Fire</b><span>M · Esc</span><b>Mute · pause / menu</b></div><p class="help-small">Drag or scroll the ridged angle wheel to aim with live turret feedback. You can also drag on the battlefield, edit the values, use the arrows, or drag the red power bar. Tap Weapon to open your arsenal.</p><button class="metal-button" data-action="close-help">Got it</button></section></div>`;
   else if (paused)
-    o.innerHTML = `<div class="veil"><section class="dialog pause-dialog"><h2 class="chrome">PAUSED</h2><p>${game.practice ? "Target practice · unlimited weapons" : "Your match is saved between turns."}</p><button class="gold" data-action="unpause">CONTINUE</button><button class="chrome small" data-action="restart">RESTART MATCH</button><button class="chrome small" data-action="menu">MAIN MENU</button></section></div>`;
+    o.innerHTML = `<div class="veil"><section class="dialog pause-dialog"><h2 class="chrome">${online() ? "MATCH MENU" : "PAUSED"}</h2><p>${online() ? "Play continues while this menu is open. Keep the host tab visible." : game.practice ? "Target practice · unlimited weapons" : "Your match is saved between turns."}</p><button class="gold" data-action="unpause">CONTINUE</button>${online() ? "" : '<button class="chrome small" data-action="restart">RESTART MATCH</button>'}<button class="chrome small" data-action="menu">MAIN MENU</button></section></div>`;
   else if (weaponOpen)
     o.innerHTML = `<div class="armory"><header><h2 class="chrome">SELECT WEAPON</h2><button class="close" data-action="weapons" aria-label="Close arsenal">×</button></header><div class="arsenal-list">${list()
       .map((id, i) => {
@@ -470,7 +819,54 @@ function action(a) {
       break;
     case "menu":
       saveMatch();
+      leaveRoom();
       go("menu");
+      break;
+    case "network":
+      mode = "online";
+      go("network");
+      break;
+    case "host-room":
+      startRoom("host");
+      break;
+    case "join-room":
+      startRoom("guest");
+      break;
+    case "retry-room":
+      if (room?.role === "guest" && room.status === "disconnected")
+        room.retry();
+      else {
+        const role = room?.role || "host",
+          code = room?.code;
+        startRoom(role, code);
+      }
+      break;
+    case "start-online":
+      if (host() && room.connected) {
+        epoch++;
+        remoteSeq = 0;
+        commandSeq = 0;
+        matchSeed = hashSeed(Date.now());
+        endSaved = false;
+        draft = draftPool(matchSeed);
+        inventories = [[], []];
+        draftTurn = 0;
+        go("draft");
+        broadcast();
+      }
+      break;
+    case "copy-room":
+      if (navigator.clipboard)
+        navigator.clipboard.writeText(inviteLink()).then(
+          () => toast("Invite link copied"),
+          () => toast("Share room code: " + room.code),
+        );
+      else toast("Share room code: " + room.code);
+      break;
+    case "edit-room":
+      room?.close();
+      room = null;
+      go("network");
       break;
     case "resume":
       resume();
@@ -484,6 +880,7 @@ function action(a) {
       break;
     case "random":
       randomDraft();
+      broadcast();
       break;
     case "fire":
       fire();
@@ -502,6 +899,7 @@ function action(a) {
       showHelp();
       break;
     case "save-options":
+      prefs.haptics = $("#haptics").value === "on";
       prefs.terrain = $("#terrain").value;
       prefs.wind = $("#wind").value === "on";
       prefs.difficulty = $("#option-difficulty").value;
@@ -510,6 +908,19 @@ function action(a) {
       break;
     case "rematch":
     case "restart":
+      if (online()) {
+        if (!host()) return;
+        epoch++;
+        remoteSeq = 0;
+        endSaved = false;
+        matchSeed = hashSeed(Date.now());
+        draft = draftPool(matchSeed);
+        inventories = [[], []];
+        draftTurn = 0;
+        go("draft");
+        broadcast();
+        return;
+      }
       endSaved = false;
       startBattle();
       break;
@@ -547,6 +958,7 @@ $("#stage").addEventListener("click", (e) => {
   if (el.dataset.weapon !== undefined) {
     selected = +el.dataset.weapon;
     weaponOpen = false;
+    if (online()) sendCommand("select", { selected });
     renderHUD();
     renderOverlay();
   }
@@ -563,39 +975,36 @@ touchControls.addEventListener("click", (e) => {
 touchControls.addEventListener("change", (e) => {
   if (e.target.id === "touch-weapon" && canPlay()) {
     selected = +e.target.value;
+    if (online()) sendCommand("select", { selected });
     renderHUD();
-  }
-});
-$("#stage").addEventListener("change", (e) => {
-  if (!canPlay()) return;
-  if (e.target.id === "angle" || e.target.id === "power") {
-    const a = Number($("#angle").value),
-      p = Number($("#power").value);
-    game.aim(Number.isFinite(a) ? a : 45, Number.isFinite(p) ? p : 55);
-    renderHUD();
-    draw();
   }
 });
 $("#stage").addEventListener("input", (e) => {
-  if (e.target.id === "power-slider" && canPlay()) {
-    game.aim(game.active.angle, +e.target.value);
-    e.target.style.setProperty("--power", e.target.value + "%");
-    $("#power").value = e.target.value;
-    draw();
-  }
+  if (
+    !canPlay() ||
+    !["angle", "power", "power-slider"].includes(e.target.id) ||
+    e.target.value === ""
+  )
+    return;
+  const v = Number(e.target.value);
+  setAim(
+    e.target.id === "angle" ? v : game.active.angle,
+    e.target.id === "angle" ? game.active.power : v,
+  );
 });
-$("#scene").addEventListener("pointerdown", (e) => {
-  audio.unlock();
-  if (!canPlay() || weaponOpen) return;
-  const r = e.target.getBoundingClientRect(),
-    x = ((e.clientX - r.left) * 800) / r.width,
-    y = ((e.clientY - r.top) * 600) / r.height;
-  if (y > 430 || y < 55) return;
-  const t = game.active;
-  let a = (Math.atan2(t.y - 5 - y, x - t.x) * 180) / Math.PI;
-  game.aim(a, t.power);
-  renderHUD();
-  draw();
+$("#stage").addEventListener("change", (e) => {
+  if (!["angle", "power", "power-slider"].includes(e.target.id) || !game)
+    return;
+  e.target.value =
+    e.target.id === "angle" ? game.active.angle : game.active.power;
+  saveMatch();
+});
+bindAiming({
+  canPlay: () => canPlay() && !weaponOpen,
+  getTank: () => game.active,
+  setAim,
+  changed: saveMatch,
+  unlock: () => audio.unlock(),
 });
 $("#sound").addEventListener("click", () => {
   audio.unlock();
@@ -626,7 +1035,10 @@ window.addEventListener("keydown", (e) => {
       return;
     }
     if (screen === "battle") pause();
-    else go("menu");
+    else {
+      leaveRoom();
+      go("menu");
+    }
     return;
   }
   if (e.target.matches("input,select,textarea")) {
@@ -665,14 +1077,24 @@ let last = performance.now(),
 function frame(now) {
   const elapsed = Math.min(0.1, (now - last) / 1000);
   last = now;
-  if (game && screen === "battle" && !paused && !helpOpen) {
+  if (
+    game &&
+    screen === "battle" &&
+    (!online() ? !paused && !helpOpen : host() && room.connected)
+  ) {
     acc += elapsed;
     while (acc >= 1 / 120) {
       game.update(1 / 120);
       acc -= 1 / 120;
     }
     const events = game.takeEvents();
+    if (online()) networkEvents.push(...events);
     for (const e of events) {
+      if (e.type === "tread") haptic(9);
+      if (e.type === "moved") {
+        saveMatch();
+        renderHUD();
+      }
       if (["fire", "blast", "move", "tick"].includes(e.type))
         audio.sound(e.type, e.radius);
       if (e.type === "turn") {
@@ -686,7 +1108,25 @@ function frame(now) {
     }
     draw();
   }
+  if (online() && host() && room.connected && now - lastNetworkSend > 80)
+    broadcast();
+  if (online() && !host() && game) {
+    const blend = 1 - Math.exp(-24 * elapsed);
+    for (const t of game.tanks) {
+      t.visualX = (t.visualX ?? t.x) + (t.x - (t.visualX ?? t.x)) * blend;
+      t.visualY = (t.visualY ?? t.y) + (t.y - (t.visualY ?? t.y)) * blend;
+    }
+    for (const p of game.projectiles) {
+      p.visualX = (p.visualX ?? p.x) + (p.x - (p.visualX ?? p.x)) * blend;
+      p.visualY = (p.visualY ?? p.y) + (p.y - (p.visualY ?? p.y)) * blend;
+    }
+    draw();
+  }
   requestAnimationFrame(frame);
+}
+if (new URLSearchParams(location.hash.slice(1)).has("join")) {
+  mode = "online";
+  screen = "network";
 }
 render();
 draw();
@@ -694,7 +1134,22 @@ requestAnimationFrame(frame);
 // Explicit deterministic scenes for screenshot review. Disabled unless ?review=1 is present.
 if (new URLSearchParams(location.search).has("review")) {
   window.__review = {
-    state: () => ({ screen, mode, paused, selected, game: game?.snapshot() }),
+    state: () => ({
+      screen,
+      mode,
+      paused,
+      selected,
+      network: room
+        ? {
+            role: room.role,
+            code: room.code,
+            status: room.status,
+            connected: room.connected,
+            reason: room.reason,
+          }
+        : null,
+      game: game?.snapshot(),
+    }),
     scene(name) {
       if (name === "title") {
         titleFixture = true;
@@ -816,6 +1271,13 @@ if (new URLSearchParams(location.search).has("review")) {
       game.selected = selected;
       game.fire(id);
       renderHUD();
+    },
+    terrain: () => Array.from(game?.ground ?? []),
+    disconnect() {
+      room?.conn?.close();
+    },
+    networkCommand(type, data) {
+      sendCommand(type, data);
     },
     finish() {
       for (let turns = 0; turns < 20 && game.phase !== "finished"; turns++) {

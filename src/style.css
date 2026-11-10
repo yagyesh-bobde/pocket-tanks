@@ -524,7 +524,7 @@ button.chrome:hover {
 }
 .options-form {
   position: absolute;
-  top: 150px;
+  top: 125px;
   left: 210px;
   width: 380px;
 }
@@ -532,7 +532,7 @@ button.chrome:hover {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 21px;
+  margin-bottom: 14px;
   font:
     18px "Russo One",
     sans-serif;
@@ -1264,4 +1264,223 @@ input::-webkit-outer-spin-button {
     font-size: 10px;
     color: #9f83af;
   }
+}
+
+/* Detented thumbwheel. Pointer capture keeps aiming live beyond its bounds. */
+.angle-control {
+  left: 466px;
+  top: 10px;
+  width: 120px;
+  height: 66px;
+}
+.angle-control > label {
+  height: 22px;
+  padding-top: 3px;
+}
+.angle-control > div:not(.angle-wheel) {
+  height: 22px;
+}
+.angle-control > .angle-wheel,
+.angle-wheel {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 20px;
+  min-height: 20px;
+  overflow: hidden;
+  border: 2px inset #666;
+  border-radius: 4px;
+  background: linear-gradient(#1a1a1a, #8b8b8b 45%, #393939);
+  cursor: ew-resize;
+  touch-action: none;
+  user-select: none;
+}
+.wheel-ticks {
+  position: absolute;
+  inset: 2px 0;
+  background: repeating-linear-gradient(
+    90deg,
+    #111 0 1px,
+    #bbb 1px 2px,
+    transparent 2px 10px
+  );
+  opacity: 0.85;
+  pointer-events: none;
+}
+.wheel-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(50% - 1px);
+  width: 2px;
+  background: #ffc333;
+  box-shadow: 0 0 3px #000;
+  pointer-events: none;
+}
+.angle-wheel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    #111b,
+    transparent 25%,
+    transparent 75%,
+    #111b
+  );
+  pointer-events: none;
+}
+.angle-wheel.dragging {
+  outline: 2px solid #ffc333;
+  cursor: grabbing;
+}
+.angle-wheel[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: default;
+}
+#scene {
+  touch-action: none;
+}
+
+@media (max-width: 650px) {
+  .touch-number .mobile-wheel {
+    grid-column: 1/-1;
+    width: 100%;
+    height: 44px;
+    min-height: 44px;
+    margin-top: 4px;
+  }
+}
+.main-menu {
+  gap: 12px;
+}
+.main-menu button.network-menu-button {
+  font-size: 26px;
+}
+#panel:has(.options-form) .continue {
+  top: 394px;
+  font-size: 30px;
+}
+/* The room form uses screen pixels so controls stay touch-sized on phones. */
+.network-view #shell {
+  height: auto !important;
+  max-width: 600px;
+}
+.network-view #stage {
+  position: relative;
+  width: 100%;
+  height: auto;
+  transform: none !important;
+}
+.network-view #scene,
+.network-view #hud {
+  display: none;
+}
+.network-view #panel {
+  position: relative;
+  inset: auto;
+}
+.network-panel {
+  position: relative;
+  padding: 30px 24px;
+  width: 100%;
+  text-align: center;
+  background: linear-gradient(#050407, #22082f);
+  font: 17px Arial;
+  color: #ddd;
+}
+#panel .network-panel h1 {
+  position: static;
+  width: auto;
+  font-size: clamp(24px, 6vw, 36px);
+  margin-bottom: 14px;
+}
+.network-panel p {
+  margin: 10px 0;
+  line-height: 1.4;
+}
+.network-panel label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  justify-content: center;
+  margin: 16px 0;
+}
+.network-panel input {
+  width: 220px;
+  min-height: 46px;
+  max-width: 100%;
+  padding: 10px;
+  background: #111;
+  color: #fff;
+  border: 2px inset #999;
+  font:
+    23px "Russo One",
+    Arial;
+}
+.network-panel #room-code {
+  width: 175px;
+  text-transform: uppercase;
+  letter-spacing: 4px;
+}
+.network-panel .metal-button {
+  padding: 10px 18px;
+  min-height: 46px;
+  font-size: 16px;
+  margin: 4px;
+}
+.network-panel .join-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  margin: 4px 0;
+  gap: 8px;
+}
+.network-panel .join-row label {
+  flex-direction: column;
+  gap: 4px;
+  margin: 12px 0;
+}
+.network-panel .network-note {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #b6b6b6;
+  max-width: 470px;
+  margin: 16px auto;
+}
+.network-panel .room-code {
+  font:
+    50px "Russo One",
+    Arial;
+  letter-spacing: 9px;
+  color: #ffc439;
+  user-select: all;
+  margin: 22px 0;
+}
+.network-panel .room-state {
+  color: #9be756;
+  font-size: 16px;
+}
+.network-panel .back {
+  position: static;
+  font-size: 16px;
+  margin-top: 12px;
+}
+.network-panel .gold {
+  display: block;
+  font-size: 28px;
+  margin: 12px auto;
+}
+.network-indicator {
+  position: absolute;
+  top: -23px;
+  left: 240px;
+  color: #b4c1a7;
+  background: #0009;
+  padding: 3px 10px;
+  font: 11px Arial;
+  letter-spacing: 1px;
+  border-radius: 4px;
 }

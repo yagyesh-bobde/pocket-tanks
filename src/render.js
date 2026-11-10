@@ -156,6 +156,12 @@ function tank(ctx, t, ground) {
     ctx.beginPath();
     ctx.arc(i, 4, 1.5, 0, 7);
     ctx.fill();
+    const spin = (t.tread ?? 0) / 2;
+    ctx.strokeStyle = "#353535";
+    ctx.beginPath();
+    ctx.moveTo(i - Math.cos(spin) * 1.5, 4 - Math.sin(spin) * 1.5);
+    ctx.lineTo(i + Math.cos(spin) * 1.5, 4 + Math.sin(spin) * 1.5);
+    ctx.stroke();
   }
   const g = ctx.createLinearGradient(0, -7, 0, 3);
   g.addColorStop(0, "#fff");
@@ -453,6 +459,17 @@ export class Renderer {
       for (const e of game.effects) {
         const progress = 1 - e.life / e.max;
         c.save();
+        if (e.kind === "treadDust") {
+          c.globalAlpha = (1 - progress) * 0.65;
+          c.fillStyle = "#a0aa76";
+          for (let i = 0; i < 4; i++)
+            c.fillRect(
+              e.x + Math.sin(i * 2) * progress * 8,
+              e.y - progress * (3 + i * 2),
+              2,
+              2,
+            );
+        }
         if (e.kind === "blast") {
           const r = e.r * Math.sin((progress * Math.PI) / 2);
           c.globalAlpha = Math.min(1, e.life * 5);
