@@ -18,16 +18,16 @@ async function connect(a, b) {
   await lobby(b, "Orbit");
   await a.getByRole("button", { name: "CREATE ROOM", exact: true }).click();
   await expect
-    .poll(async () => (await state(a)).network.status)
+    .poll(async () => (await state(a)).network?.status)
     .toBe("waiting");
   const code = (await state(a)).network.code;
   await b.getByLabel("Room code", { exact: true }).fill(code);
   await b.getByRole("button", { name: "JOIN ROOM", exact: true }).click();
   await expect
-    .poll(async () => (await state(a)).network.connected, { timeout: 20000 })
+    .poll(async () => (await state(a)).network?.connected, { timeout: 20000 })
     .toBe(true);
   await expect
-    .poll(async () => (await state(b)).network.connected, { timeout: 20000 })
+    .poll(async () => (await state(b)).network?.connected, { timeout: 20000 })
     .toBe(true);
   return code;
 }
@@ -104,7 +104,13 @@ test("two independent WebRTC clients draft, enforce turns, stream aim/movement, 
     await expect.poll(async () => (await state(a)).game.phase).toBe("moving");
     await expect(b.locator(".fire")).toBeDisabled();
     await expect.poll(async () => (await state(b)).game.phase).toBe("aiming");
-    expect((await state(a)).game.tanks[1].x).toBe(guestX - 25);
+    // The guest can still hold its previous aiming snapshot while a move is in flight.
+    await expect
+      .poll(async () => (await state(a)).game.tanks[1].x)
+      .toBe(guestX - 25);
+    await expect
+      .poll(async () => (await state(b)).game.tanks[1].x)
+      .toBe(guestX - 25);
     // Drop the actual data channel, then reconnect from the original guest tab.
     await b.evaluate(() => window.__review.disconnect());
     await expect(
@@ -113,7 +119,7 @@ test("two independent WebRTC clients draft, enforce turns, stream aim/movement, 
     expect((await state(a)).network.code).toBe(code);
     await b.getByRole("button", { name: "RECONNECT", exact: true }).click();
     await expect
-      .poll(async () => (await state(a)).network.connected, { timeout: 20000 })
+      .poll(async () => (await state(a)).network?.connected, { timeout: 20000 })
       .toBe(true);
     await expect(b.locator(".fire")).toBeEnabled();
     expect((await state(b)).game.history).toHaveLength(1);

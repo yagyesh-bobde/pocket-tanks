@@ -8,6 +8,9 @@ import { Renderer } from "./render.js";
 import { Audio } from "./audio.js";
 import { angleWheel, bindAiming } from "./controls.js";
 import { Room, cleanCode, gamePacket } from "./network.js";
+import { createAnalytics } from "./analytics.js";
+
+const analytics = createAnalytics();
 
 const $ = (s) => document.querySelector(s),
   escape = (s) =>
@@ -90,7 +93,12 @@ const audio = new Audio(!prefs.sound);
 $("#app").innerHTML =
   `<header class="page-bar"><a class="wordmark" href="./">POCKET TANKS <span>WEB REMAKE</span></a><div><button id="sound" title="Toggle sound (M)" aria-label="Toggle sound">${prefs.sound ? "♫ SOUND ON" : "♫ SOUND OFF"}</button><button id="help" aria-label="How to play">? HELP</button><button id="fullscreen" aria-label="Fullscreen">⛶</button><a href="https://github.com/yagyesh-bobde/pocket-tanks" target="_blank" rel="noopener">GITHUB ↗</a></div></header>
 <main><div id="shell"><div id="stage"><canvas id="scene" width="800" height="600" aria-label="Pocket Tanks battlefield"></canvas><div id="panel"></div><div id="hud"></div><div id="overlay"></div><div id="toast" role="status" aria-live="polite"></div></div></div></main>
-<footer class="page-footer"><span>A fan-made tribute to the 2001 artillery classic. Original code, art & sound.</span><span>Not affiliated with Blitwise Productions.</span></footer>`;
+<footer class="page-footer"><span>A fan-made tribute to the 2001 artillery classic. Original code, art & sound.</span><span>Not affiliated with Blitwise Productions. · <a href="./privacy.html">Analytics & privacy</a> <button id="analytics-optout" ${analytics.enabled ? "" : "disabled"}>${analytics.enabled ? "Disable analytics" : "Analytics disabled"}</button></span></footer>`;
+$("#analytics-optout").addEventListener("click", (event) => {
+  analytics.optOut();
+  event.currentTarget.textContent = "Analytics disabled";
+  event.currentTarget.disabled = true;
+});
 const touchControls = document.createElement("div");
 touchControls.id = "touch-controls";
 touchControls.setAttribute("aria-label", "Touch controls");
@@ -133,6 +141,7 @@ function go(next) {
   clearTimeout(cpuTimer);
   cpuTimer = null;
   screen = next;
+  analytics.track("pt_screen_view", { screen: next, mode });
   weaponOpen = false;
   paused = false;
   helpOpen = false;
@@ -151,6 +160,7 @@ function names() {
 }
 function begin(type) {
   mode = type;
+  analytics.track("pt_mode_selected", { mode });
   matchSeed = hashSeed(Date.now());
   endSaved = false;
   game = null;
@@ -224,6 +234,12 @@ function randomDraft() {
   startBattle();
 }
 function startBattle() {
+  analytics.track("pt_match_started", {
+    mode,
+    terrain: prefs.terrain,
+    wind: !!prefs.wind,
+    difficulty: prefs.difficulty,
+  });
   game = new Game({
     seed: matchSeed,
     type: prefs.terrain,
@@ -264,6 +280,7 @@ function saveMatch() {
 function resume() {
   if (!saved) return;
   mode = saved.mode;
+  analytics.track("pt_match_resumed", { mode });
   game = new Game({
     seed: saved.seed,
     type: saved.type,
@@ -413,6 +430,12 @@ function scheduleCPU() {
 function finishMatch() {
   if (!endSaved) {
     endSaved = true;
+    analytics.track("pt_match_completed", {
+      mode,
+      shots: game.history.length,
+      score_1: game.tanks[0].score,
+      score_2: game.tanks[1].score,
+    });
     const winner =
       game.tanks[0].score === game.tanks[1].score
         ? -1
@@ -495,6 +518,7 @@ function startRoom(role, code) {
       }
     },
     onConnect: () => {
+      analytics.track("pt_room_connected", { role: room.role });
       if (host()) {
         prefs.names = [room.name, room.remoteName];
         if (screen === "network") render();
@@ -514,6 +538,7 @@ function startRoom(role, code) {
     },
   });
   mode = "online";
+  analytics.track("pt_mode_selected", { mode });
   go("network");
   room.start(role, code, name);
 }
@@ -683,6 +708,20 @@ function receiveState(data) {
   const changedScreen = screen !== data.screen;
   screen = data.screen;
   if (changedScreen) {
+    analytics.track("pt_screen_view", { screen, mode });
+    if (screen === "battle")
+      analytics.track("pt_match_started", {
+        mode,
+        terrain: game?.type,
+        wind: !!game?.windOn,
+      });
+    if (screen === "end")
+      analytics.track("pt_match_completed", {
+        mode,
+        shots: game?.history.length,
+        score_1: game?.tanks[0].score,
+        score_2: game?.tanks[1].score,
+      });
     paused = false;
     helpOpen = false;
     weaponOpen = false;

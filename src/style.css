@@ -562,6 +562,22 @@ button.chrome:hover {
   font-size: 9px;
   color: #776e80;
 }
+.page-footer a {
+  color: inherit;
+}
+.page-footer button {
+  color: inherit;
+  font: inherit;
+  background: none;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  padding: 2px 5px;
+  cursor: pointer;
+}
+.page-footer button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
 #hud {
   position: absolute;
   top: 450px;

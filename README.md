@@ -16,7 +16,7 @@ This repository is **public and open source under the MIT license**. Anyone can 
 - Animated driving with tread motion, dust, engine audio, and optional supported-device vibration.
 - A draggable and scrollable angle wheel, live turret updates, and keyboard/mouse/touch controls.
 
-Validation covers **29 automated tests**: 20 engine tests, 6 browser tests, and 3 WebRTC tests. It includes 144 prediction-versus-impact physics cases, a complete two-client match, reconnects, and a real-time 160-particle Hail Storm. The deployment workflow runs these checks before publishing to GitHub Pages.
+Validation covers **34 automated tests**: 20 engine tests, 5 analytics tests, 6 browser tests, and 3 WebRTC tests. It includes 144 prediction-versus-impact physics cases, a complete two-client match, reconnects, and a real-time 160-particle Hail Storm. The deployment workflow runs these checks before publishing to GitHub Pages.
 
 This is an independent fan project, not affiliated with or endorsed by Blitwise Productions. Pocket Tanks and its game identity belong to Blitwise. All game code, tank illustrations, terrain rendering, effects, and sound synthesis here are newly made. Please support [the original game](https://www.blitwise.com/pocket-tanks).
 
@@ -63,7 +63,7 @@ Target practice alternates tanks with all thirty weapons and never consumes ammo
 | Pause / close | Pause button | Escape |
 | Sound | Sound button | M |
 
-Phones have an additional large touch dock below the classic game panel. Fullscreen is available where supported. Name fields, weapon choices, and controls have accessible labels and keyboard focus states. Saved matches resume between turns after reloading; preferences and the five highest completed match records stay in this browser's local storage. Network rooms exchange names, commands, and match state with the other player; local matches remain on the device.
+Phones have an additional large touch dock below the classic game panel. Fullscreen is available where supported. Name fields, weapon choices, and controls have accessible labels and keyboard focus states. Saved matches resume between turns after reloading; preferences and the five highest completed match records stay in this browser's local storage. Network rooms exchange names, commands, and match state with the other player; local match state remains on the device. The published site also sends anonymous visitor and basic game-activity statistics as described below.
 
 ## Two-device play
 
@@ -137,6 +137,16 @@ The engine suite checks deterministic terrain/drafts, swept collision, scoring, 
 
 The [comparison report](docs/comparisons/index.html) keeps before/after images, all six attributed reference pairs, an explicit weighted visual rubric, and subjective per-frame scores. Results and mobile images have no original reference and are unscored. See [the research record](docs/RESEARCH.md) for capture methodology and sources.
 
+## Analytics
+
+The published game uses **PostHog** in the existing Storyowl project. The private [Pocket Tanks dashboard](https://us.posthog.com/project/68409/dashboard/2331682) contains visitors, pageviews, sessions, daily traffic, new/returning browsers, referrers, countries, devices, browsers, modes, match completions, and connected multiplayer browsers. Every chart filters `app=pocket-tanks` and `environment=production` to separate this game from other apps in that project.
+
+Visitors are anonymous browser IDs, **not identified people**. New/returning means first/subsequent page loads in a browser with local storage available; it is not cross-device identity or a retention cohort. Session counts use PostHog session IDs. Approximate location and browser/device/source information accompany events. Game events are `pt_mode_selected`, `pt_screen_view`, `pt_match_started`, `pt_match_resumed`, `pt_match_completed`, and `pt_room_connected`. Match and room counts are per participating browser; an online match can contribute two events.
+
+Player names, room codes, form values, and save data are excluded. URL query strings/fragments are stripped before sending. Automatic click capture, recordings, heatmaps, surveys, exceptions, and performance capture are disabled. Analytics honors Do Not Track, Global Privacy Control, and the **Disable analytics** footer button. The [privacy page](https://yagyesh-bobde.github.io/pocket-tanks/privacy.html) explains collection and lets a browser opt back in. Analytics failures do not block the game.
+
+Only the exact published game host/path sends analytics. Localhost, LAN builds, other forks, and `?review=1` capture fixtures are excluded. Development/tests need no key and do not send traffic. GitHub Actions builds the production client using repository variables `VITE_POSTHOG_KEY` (the **public project ingestion token**, never a personal API key) and `VITE_POSTHOG_HOST` (`https://us.i.posthog.com`). Configure your own public project token and change `productionVisitor` in `src/analytics.js` when hosting a fork. Keep personal API keys and account/session credentials out of frontend code and repository variables.
+
 ## Design and limits
 
 - Browser Canvas 2D and accessible HTML controls; no game framework or hosted game backend. PeerJS is loaded only for multiplayer.
@@ -148,6 +158,6 @@ The [comparison report](docs/comparisons/index.html) keeps before/after images, 
 
 ## License and credits
 
-Original code and original artwork: [MIT](LICENSE). Bundled fonts **Russo One** and **Lilita One**: SIL Open Font License, with notices under [docs/licenses](docs/licenses/). PeerJS and its bundled runtime dependencies retain their MIT/BSD notices there as well. Blitwise's reference screenshots and their excerpts in comparison PNGs remain copyrighted by Blitwise and are excluded from the MIT license; they appear only in attributed comparison documentation. The game does not load those screenshots.
+Original code and original artwork: [MIT](LICENSE). Bundled fonts **Russo One** and **Lilita One**: SIL Open Font License, with notices under [docs/licenses](docs/licenses/). PeerJS and PostHog, with their bundled runtime dependencies, retain their MIT/BSD/Apache notices there as well. Blitwise's reference screenshots and their excerpts in comparison PNGs remain copyrighted by Blitwise and are excluded from the MIT license; they appear only in attributed comparison documentation. The game does not load those screenshots.
 
 Rules and weapon behavior were researched from Blitwise, Sao Li Zhou's 2003 GameFAQs FAQ, and Gerarge's Weapon Info guide. Full links and distinctions between observed facts and reconstruction choices are in [docs/RESEARCH.md](docs/RESEARCH.md).
