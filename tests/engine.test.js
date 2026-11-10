@@ -13,6 +13,7 @@ import {
   STEP,
 } from "../src/engine.js";
 import { WEAPONS } from "../src/weapons.js";
+import { gamePacket } from "../src/network.js";
 const step = (g, seconds) => {
   for (let i = 0; i < seconds * 120; i++) g.update(1 / 120);
 };
@@ -306,4 +307,37 @@ test("zero wind equal-height range and mirrored launch directions are symmetric"
   }
   assert.ok(Math.abs(left.x + right.x - 800) < 1e-8);
   assert.ok(Math.abs(left.y - right.y) < 1e-8);
+});
+
+test("all weapon snapshots retain every particle and stay below the WebRTC message budget", () => {
+  let largest = 0;
+  for (const weapon of WEAPONS) {
+    const g = flat({ practice: true });
+    g.aim(45, 30);
+    g.fire(weapon.id);
+    for (let i = 0; i < 5000 && g.phase === "firing"; i++) {
+      g.update(STEP);
+      if (i % 10 !== 0) continue;
+      const packet = gamePacket(g);
+      const bytes = new TextEncoder().encode(JSON.stringify(packet)).length;
+      largest = Math.max(largest, bytes);
+      assert.ok(bytes < 48 * 1024, `${weapon.id}: ${bytes} bytes`);
+      assert.equal(
+        packet.projectiles.length,
+        g.projectiles.length,
+        "retain every rendered particle",
+      );
+      for (let j = 0; j < packet.projectiles.length; j++) {
+        const p = packet.projectiles[j];
+        assert.ok(
+          Math.hypot(p.x - g.projectiles[j].x, p.y - g.projectiles[j].y) <
+            0.008,
+        );
+        assert.equal(p.digGround, undefined);
+        assert.equal(p.damage, undefined);
+        assert.ok(p.trail.length <= 24);
+      }
+    }
+  }
+  assert.ok(largest > 15000, "exercise a substantial effect packet");
 });

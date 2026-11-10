@@ -183,3 +183,40 @@ test("unknown code fails clearly and a third client cannot replace an occupied s
     await Promise.all(contexts.map((c) => c.close()));
   }
 });
+
+test("Hail Storm streams all 160 particles in real time without disconnecting", async ({
+  browser,
+}) => {
+  const ca = await browser.newContext(),
+    cb = await browser.newContext();
+  const a = await ca.newPage(),
+    b = await cb.newPage();
+  try {
+    await connect(a, b);
+    await a.locator("[data-action=start-online]").click();
+    await a.locator("[data-action=random]").click();
+    await expect(a.locator(".fire")).toBeEnabled();
+    await a.evaluate(() => {
+      window.__review.equip("hail");
+      window.__review.aim(45, 5);
+    });
+    await a.locator(".fire").click();
+    // No accelerated simulation: the peer must receive every dense effect frame.
+    await expect
+      .poll(async () => (await state(b)).game?.projectiles, { timeout: 10000 })
+      .toBe(160);
+    await expect
+      .poll(async () => (await state(b)).game?.turn, { timeout: 12000 })
+      .toBe(1);
+    expect((await state(a)).network.connected).toBe(true);
+    expect((await state(b)).network.connected).toBe(true);
+    await expect(b.locator(".fire")).toBeEnabled();
+    expect((await state(b)).game.history).toHaveLength(1);
+    expect((await state(b)).game.tanks.map((t) => t.score)).toEqual(
+      (await state(a)).game.tanks.map((t) => t.score),
+    );
+  } finally {
+    await ca.close();
+    await cb.close();
+  }
+});

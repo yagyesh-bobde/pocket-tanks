@@ -1272,6 +1272,13 @@ if (new URLSearchParams(location.search).has("review")) {
       game.fire(id);
       renderHUD();
     },
+    equip(id) {
+      if (!weaponById[id] || !game || (online() && !host())) return;
+      game.active.inventory[0] = id;
+      selected = 0;
+      renderHUD();
+      broadcast();
+    },
     terrain: () => Array.from(game?.ground ?? []),
     disconnect() {
       room?.conn?.close();

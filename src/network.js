@@ -1,6 +1,6 @@
 // Signaling discovers the other browser; game traffic uses one WebRTC data channel.
 // Only the host simulates. Guests send bounded commands, never terrain or scores.
-export const PROTOCOL = 2;
+export const PROTOCOL = 3;
 const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 export const roomCode = () =>
   Array.from(
@@ -148,7 +148,8 @@ export class Room {
     this.bind(
       this.peer.connect(`pt-web-v${PROTOCOL}-${this.code}`, {
         reliable: true,
-        serialization: "json",
+        // Binary mode chunks effects larger than PeerJS’s 16,300-byte JSON limit.
+        serialization: "binary",
         metadata: { version: PROTOCOL },
       }),
     );
@@ -293,8 +294,28 @@ export function gamePacket(game) {
     tanks: structuredClone(game.tanks),
     history: game.history,
     ground: Array.from(game.ground, (n) => Math.round(n * 100) / 100),
-    projectiles: game.projectiles.map(({ digGround, ...p }) => p),
+    projectiles: game.projectiles.map((p) => ({
+      serial: p.serial,
+      id: p.id,
+      kind: p.kind,
+      color: p.color,
+      x: Math.round(p.x * 100) / 100,
+      y: Math.round(p.y * 100) / 100,
+      vx: Math.round(p.vx * 100) / 100,
+      vy: Math.round(p.vy * 100) / 100,
+      // Simulation-only fields, including copied underground heightmaps, stay local.
+      // Sample the entire visible trail rather than dropping its older arc.
+      trail: sampleTrail(p.trail, 24),
+    })),
     effects: game.effects,
     labels: game.labels,
   };
+}
+function sampleTrail(trail = [], limit) {
+  if (!limit || !trail.length) return [];
+  const n = Math.min(limit, trail.length);
+  return Array.from({ length: n }, (_, i) => {
+    const p = trail[Math.round((i * (trail.length - 1)) / Math.max(1, n - 1))];
+    return { x: Math.round(p.x * 100) / 100, y: Math.round(p.y * 100) / 100 };
+  });
 }
