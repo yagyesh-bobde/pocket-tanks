@@ -1,0 +1,67 @@
+"""Build attributed comparison pairs and a portable interactive HTML review.
+
+Requires Pillow. The private reference/ originals are used if available; already
+committed comparison PNGs are sufficient to regenerate the HTML on other machines.
+"""
+from pathlib import Path
+from PIL import Image, ImageDraw
+import json
+
+ROOT = Path(__file__).resolve().parents[1]
+OUT = ROOT / 'docs/comparisons'
+frames = [
+    dict(id='titlescreen',name='Title',before=[8,6.5,8,6,7,6],scores=[9,8,8.5,6.5,8.5,7],note='The black stage, corner scores, purple/gold logo, rainbow rules, and three text bands align. Logo letterforms and metallic bevels remain visibly different. Tribute wording replaces the original publisher promotion.'),
+    dict(id='player1',name='Player setup',before=[9,8,8,6.5,7.5,7],scores=[9.5,8.5,9,7,8,7.5],note='Heading, name, colour label, eight swatches, Continue, and inactive HUD sit in the reference positions. The original futuristic font and more detailed silver tank are the largest differences.'),
+    dict(id='weaponshop',name='Weapon shop',before=[9,8.5,8.5,6.5,7.5,6.5],scores=[9.5,9,9,7,8,7],note='Two ten-row weapon columns, coloured inventory wells, pick arrow, Random, and bottom HUD reproduce the shop composition. Icons are original symbols, and typography and bevels are approximate.'),
+    dict(id='spider',name='Spider impact',before=[8.5,6.5,8,6.5,7.5,5.5],scores=[9,8.5,9,7,8,7.5],note='The mountain silhouette, green strata, score corners, 69° / 76 controls, web streaks, and gold impact rings now correspond. Small tank geometry, web directions, exact explosion timing, and HUD artwork differ.'),
+    dict(id='hailstorm',name='Hail Storm',before=[7,5.5,8,6.5,7.5,4.5],scores=[9,8.5,9,7,8,7],note='Valley and cliff geometry, palette, 70° / 73 controls, and flowing blue particles correspond. Our effect is more segmented and less misty than the original; tank and font detail also remain approximate.'),
+    dict(id='tommygun',name='Tommy Gun',before=[8,6.5,8,6.5,7.5,5],scores=[9,8.5,9,7,8,8],note='Plateau, steep drop, low right tank, 29° / 59 controls, and separated blue ballistic bullets correspond. Arc timing and spacing are close rather than identical; original font and tank model differ.'),
+]
+weights=[.20,.20,.15,.15,.20,.10]
+for f in frames:
+    f['score']=round(sum(a*b for a,b in zip(f['scores'],weights))+1e-8,1)
+    f['initial']=round(sum(a*b for a,b in zip(f['before'],weights))+1e-8,1)
+    f['source']='https://classic.blitwise.com/ptanks/pt_'+{'titlescreen':'titlescreen','player1':'player1','weaponshop':'weaponshop','spider':'spider','hailstorm':'hailstorm','tommygun':'tommygun'}[f['id']]+'.jpg'
+    for version in ['iteration-1','iteration-2','final']:
+        original=ROOT/'reference'/f"{f['id']}.jpg"
+        ours=OUT/version/f"{f['id']}.png"
+        if original.exists() and ours.exists():
+            out=Image.new('RGB',(1600,638),'#15121a')
+            out.paste(Image.open(original).convert('RGB'),(0,38));out.paste(Image.open(ours).convert('RGB'),(800,38))
+            draw=ImageDraw.Draw(out);draw.text((15,12),'ORIGINAL / Blitwise classic PC',fill='white');draw.text((815,12),'OURS / '+('Final review' if version=='final' else version.title()),fill='white')
+            out.save(OUT/version/f"{f['id']}-pair.png",optimize=True)
+(OUT/'scores.json').write_text(json.dumps({'weights':weights,'frames':frames,'review':'Subjective author assessment; not an independent or automated likeness score.'},indent=2)+'\n')
+rows=''.join(f"<tr data-frame='{f['id']}' tabindex='0'><th>{f['name']}</th>"+''.join(f'<td>{v:g}</td>' for v in f['scores'])+f"<td><b>{f['score']:.1f}</b></td></tr>" for f in frames)
+buttons=''.join(f"<button data-frame='{f['id']}'>{f['name']}</button>" for f in frames)
+charts=''.join(f"<div class='bar-row'><span>{f['name']}</span><div class='bar-track'><i class='before' style='width:{f['initial']*10}%'></i><i class='after' style='width:{f['score']*10}%'></i><em class='target'></em></div><b>{f['initial']:.1f} → {f['score']:.1f}</b></div>" for f in frames)
+html='''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pocket Tanks — visual comparison review</title><style>
+*{box-sizing:border-box}html,body{margin:0;background:transparent}body{font-family:var(--font-sans,system-ui,sans-serif);color:var(--foreground,#25202e);font-size:13px;line-height:1.5}p{margin:0 0 12px}a{color:var(--primary,#6840b5)}button{font:inherit;cursor:pointer;color:var(--foreground,#25202e);background:var(--secondary,#efebf4);border:1px solid var(--border,#d8cde4);border-radius:6px;padding:7px 10px}button.active{background:var(--primary,#7142b5);color:var(--primary-foreground,#fff);border-color:var(--primary,#7142b5)}button:focus-visible,a:focus-visible,tr:focus-visible{outline:2px solid var(--ring,#9d78d3);outline-offset:2px}.muted{color:var(--muted-foreground,#736780)}.card{padding:16px;background:var(--card,#f7f4fa);border-radius:var(--radius,12px);margin:14px 0}.table-wrap{overflow:auto}table{border-collapse:collapse;width:100%;font-size:11px;white-space:nowrap}td,th{text-align:center;border-bottom:1px solid var(--border,#ddd4e7);padding:7px 5px}th:first-child{text-align:left}tbody tr{cursor:pointer}tbody tr.active{background:var(--accent,#ece2f9)}thead{color:var(--muted-foreground,#736780)}.score{font-weight:700;color:var(--success,#2e8052)}nav{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}.section-label{font-weight:650;margin-bottom:10px}.pair{display:block;width:100%;height:auto;background:var(--code-background,#16121c);border:1px solid var(--border,#ddd4e7);border-radius:5px}.frame-line{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin:10px 0}.frame-line strong{font-size:17px}.switch{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}.caption{font-size:11px;margin-top:9px;color:var(--muted-foreground,#736780)}.bar-row{display:grid;grid-template-columns:95px 1fr 77px;gap:9px;align-items:center;font-size:10px;margin:7px 0}.bar-track{position:relative;height:19px;border-right:1px solid var(--border,#ccc)}.bar-track i{display:block;height:7px;margin-bottom:3px;border-radius:0 3px 3px 0}.before{background:var(--chart-2,#9c8ba9);opacity:.65}.after{background:var(--chart-1,#8154c3)}.target{position:absolute;left:80%;top:-2px;height:22px;border-left:1px dashed var(--foreground,#392d42);opacity:.65}.legend{display:flex;gap:20px;font-size:10px;color:var(--muted-foreground,#736780);margin-bottom:10px}.legend i{display:inline-block;width:15px;height:6px;margin-right:4px}.extras{display:grid;grid-template-columns:1.6fr 1fr;gap:12px;align-items:start}.extras img{width:100%;border-radius:6px}.extras figure{margin:0}.extras figcaption{font-size:10px;color:var(--muted-foreground,#736780);margin-top:5px}details summary{cursor:pointer;font-weight:650}details[open] summary{margin-bottom:12px}@media(max-width:500px){body{font-size:12px}.card{padding:12px}.bar-row{grid-template-columns:75px 1fr 65px;gap:6px}button{font-size:11px;padding:6px 8px}.extras{grid-template-columns:1fr}table{font-size:10px}}
+</style></head><body>
+<p><strong>Six real reference frames, three visual passes.</strong> The left image is Blitwise’s classic PC screenshot; the right is our running web remake. Final weighted scores range from <strong>8.1 to 8.4 / 10</strong>.</p>
+<p class="muted">These are my subjective frame-level judgments. An 8 means strong overall resemblance with visible differences. Original fonts, logo bevels, detailed tank art, and exact effect timing remain gaps. This is not a pixel-identical reproduction or independent certification.</p>
+<div class="card"><p class="section-label">Consistent rubric · each dimension scored out of 10</p><p class="caption">Composition 20% · geometry 20% · palette 15% · typography 15% · HUD/control layout 20% · effect/finish fidelity 10%. For setup and title, “effects/finish” covers material and bevel treatment. Click any row to inspect its frame.</p><div class="table-wrap"><table><thead><tr><th>Frame</th><th>Comp.</th><th>Geom.</th><th>Palette</th><th>Type</th><th>HUD</th><th>Effect</th><th>Total</th></tr></thead><tbody>ROWS</tbody></table></div></div>
+<div class="card"><p class="section-label">Iteration 1 → final</p><div class="legend"><span><i class="before"></i>First captured pass</span><span><i class="after"></i>Final pass</span><span>Dashed line: 8/10 target</span></div>CHARTS<p class="caption">Changes: matched terrain silhouettes and smoothed strata; widened metallic lettering; rebuilt the logo proportions; detailed the silver tank; removed continuous Tommy Gun trails; refined web impacts and flowing ice. Before images remain available below.</p></div>
+<nav aria-label="Reference frames">BUTTONS</nav>
+<div class="switch" aria-label="Iteration"><button data-version="final" class="active">Final</button><button data-version="iteration-2">Iteration 2</button><button data-version="iteration-1">Iteration 1</button></div>
+<div class="frame-line"><strong id="frame-name"></strong><span id="frame-score" class="score"></span></div><img id="pair" class="pair" alt="Original game screenshot beside the running web remake"><p id="note" class="caption"></p><p class="caption"><a id="source" target="_blank" rel="noopener">Open official original</a> · <a id="png" target="_blank">Open full-size comparison PNG</a></p>
+<div class="card"><p class="section-label">Capture and attribution</p><p>All originals come from the <a href="https://classic.blitwise.com/ptanks.html">official Blitwise gallery</a>, accessed 10 November 2026. Their copyrights remain with Blitwise. They are excluded from the remake’s MIT license and never loaded by the game renderer.</p><p>The game stage is 800 × 600. Review fixtures fix terrain, names, scores, angles, and powers to the observed scene. Effects are real simulation snapshots at fixed times. Ordinary matches use independently generated maps. The first two passes used the shared preview browser, with ICC conversion to sRGB; the final pass uses Playwright Chromium. No screenshot controls or effects were painted in afterward.</p><p class="muted">The gallery supplies no end-screen reference. The results screen and phone layout below are therefore unscored. Fourteen engine tests and three browser flow tests pass; browser tests accelerate shot resolution while exercising actual controls through all twenty shots.</p><a href="https://github.com/yagyesh-bobde/pocket-tanks/blob/main/docs/RESEARCH.md">Research, methodology, and honest limitations ↗</a></div>
+<details><summary>Our results screen and mobile controls · no original counterpart</summary><div class="extras"><figure><img src="end-state.png" alt="Completed twenty-shot match with final scorecard"><figcaption>Real completed local match, captured by the browser test.</figcaption></figure><figure><img src="mobile.png" alt="Phone view with large touch controls"><figcaption>390px phone viewport; additional touch dock below the classic panel.</figcaption></figure></div></details>
+<script>const frames=FRAMES;let selected=frames[0].id,version='final';function show(){const f=frames.find(x=>x.id===selected);document.querySelector('#frame-name').textContent=f.name;document.querySelector('#frame-score').textContent=(version==='iteration-1'?f.initial:version==='final'?f.score:'—')+' / 10'+(version==='iteration-2'?' · intermediate capture':'');document.querySelector('#pair').src=version+'/'+f.id+'-pair.png';document.querySelector('#note').textContent=f.note;document.querySelector('#source').href=f.source;document.querySelector('#png').href=version+'/'+f.id+'-pair.png';document.querySelectorAll('[data-frame]').forEach(el=>el.classList.toggle('active',el.dataset.frame===selected));document.querySelectorAll('[data-version]').forEach(el=>el.classList.toggle('active',el.dataset.version===version));}document.querySelectorAll('[data-frame]').forEach(el=>{el.onclick=()=>{selected=el.dataset.frame;show()};el.onkeydown=e=>{if(e.key==='Enter'){selected=el.dataset.frame;show()}}});document.querySelectorAll('[data-version]').forEach(el=>el.onclick=()=>{version=el.dataset.version;show()});show();</script></body></html>'''
+html=html.replace('ROWS',rows).replace('CHARTS',charts).replace('BUTTONS',buttons).replace('FRAMES',json.dumps(frames))
+(OUT/'index.html').write_text(html)
+# The T3 inline renderer resolves absolute local image paths. Its preview copy
+# embeds all frame sources so navigation works after the artifact is attached.
+import base64
+inline=html
+for version in ['final','iteration-1','iteration-2']:
+    for f in frames:
+        path=OUT/version/f"{f['id']}-pair.png"
+        f[version]='data:image/png;base64,'+base64.b64encode(path.read_bytes()).decode()
+inline=inline.replace('const frames='+json.dumps(json.loads(json.dumps(json.loads(html.split('const frames=')[1].split(';let selected=')[0])))), 'const frames='+json.dumps(frames))
+inline=inline.replace("document.querySelector('#pair').src=version+'/'+f.id+'-pair.png';", "document.querySelector('#pair').src=f[version];")
+inline=inline.replace("document.querySelector('#png').href=version+'/'+f.id+'-pair.png';", "document.querySelector('#png').href=f[version];")
+for f in ['end-state','mobile']:
+    path=OUT/f'{f}.png'
+    if path.exists():inline=inline.replace(f'src="{f}.png"',f'src="{path}"')
+Path('/tmp/pocket-tanks-inline-report.html').write_text(inline)
+print('Built comparison report; scores:',{f['name']:f['score'] for f in frames})

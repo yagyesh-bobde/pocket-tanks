@@ -1,0 +1,1267 @@
+:root {
+  font-family: Arial, Helvetica, sans-serif;
+  color: #e3e0e8;
+  background: #0e0b12;
+  font-synthesis: none;
+  color-scheme: dark;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  min-width: 280px;
+}
+button,
+input,
+select {
+  font: inherit;
+}
+button,
+a,
+input,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+button {
+  cursor: pointer;
+  color: #eee;
+}
+button:disabled {
+  cursor: default;
+}
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid #61e4ff;
+  outline-offset: 3px;
+}
+a {
+  color: inherit;
+  text-decoration: none;
+}
+.page-bar {
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0 20px;
+  font-size: 10px;
+  letter-spacing: 1.1px;
+}
+.wordmark {
+  font-family: "Russo One", sans-serif;
+  font-size: 13px;
+  color: #c7b5da;
+}
+.wordmark span {
+  font-family: Arial, sans-serif;
+  font-size: 8px;
+  color: #777;
+  letter-spacing: 1.3px;
+  margin-left: 9px;
+}
+.page-bar > div {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+.page-bar button {
+  background: none;
+  border: 0;
+  padding: 7px 0;
+  font-size: 10px;
+  color: #9e92ae;
+  letter-spacing: 0.7px;
+}
+.page-bar a:hover,
+.page-bar button:hover {
+  color: #f3dcff;
+}
+main {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: calc(100dvh - 102px);
+}
+#shell {
+  position: relative;
+  background: #000;
+  box-shadow:
+    0 0 0 1px #352d3e,
+    0 16px 90px #0008;
+  overflow: hidden;
+}
+#stage {
+  position: absolute;
+  width: 800px;
+  height: 600px;
+  transform-origin: top left;
+  background: #000;
+}
+#scene {
+  position: absolute;
+  inset: 0;
+  width: 800px;
+  height: 600px;
+}
+#panel {
+  position: absolute;
+  inset: 0 0 150px;
+  pointer-events: none;
+}
+#panel > * {
+  pointer-events: auto;
+}
+h1,
+h2,
+p {
+  margin: 0;
+}
+.chrome,
+.gold,
+#player-name,
+.color-name {
+  font-family: "Russo One", sans-serif;
+  font-weight: 400;
+  letter-spacing: 0.2px;
+}
+.chrome {
+  color: #c5c5c5;
+  background: linear-gradient(
+    #ececec 0%,
+    #a9a9a9 32%,
+    #777 58%,
+    #bbb 79%,
+    #888 100%
+  );
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(1px 2px 0 #3e3e3e) drop-shadow(2px 2px 0 #111);
+}
+.gold {
+  color: #e4cf00;
+  background: linear-gradient(
+    #fff26b,
+    #e7cf00 32%,
+    #b8a000 60%,
+    #d8c600 82%,
+    #8d7700
+  );
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(1px 2px 0 #4d4200) drop-shadow(1px 2px 0 #000);
+}
+button.chrome,
+button.gold {
+  border: 0;
+  background-color: transparent;
+}
+.plain {
+  background: none;
+  border: 0;
+}
+#panel h1 {
+  position: absolute;
+  top: 74px;
+  width: 100%;
+  text-align: center;
+  font-size: 40px;
+}
+.splash-hit {
+  position: absolute;
+  top: 70px;
+  left: 70px;
+  width: 660px;
+  height: 275px;
+  border: 0;
+  background: none;
+}
+.start-text {
+  position: absolute;
+  top: 341px;
+  width: 100%;
+  background: none;
+  border: 0;
+  font: 8px monospace;
+  color: #ccc;
+}
+.splash-copy {
+  position: absolute;
+  top: 367px;
+  width: 100%;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 23px;
+  font-size: 25px;
+  line-height: 0.95;
+}
+.splash-copy button {
+  font-size: 25px;
+  line-height: 0.95;
+}
+.title-credits {
+  position: absolute;
+  top: 590px;
+  width: 100%;
+  padding: 0 3px;
+  font: 7px monospace;
+  color: #7b7b7b;
+  display: flex;
+  justify-content: space-between;
+}
+.main-menu {
+  position: absolute;
+  top: 153px;
+  left: 100px;
+  right: 100px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+.main-menu button {
+  font-size: 30px;
+  line-height: 1.2;
+  transition: filter 0.1s;
+}
+.main-menu button:hover,
+button.gold:hover,
+button.chrome:hover {
+  filter: brightness(1.35) drop-shadow(0 0 4px #c5874555);
+}
+.main-menu button.small,
+.small {
+  font-size: 23px;
+}
+.menu-note {
+  position: absolute;
+  bottom: 14px;
+  width: 100%;
+  text-align: center;
+  font-size: 12px;
+  color: #ae8fc1;
+}
+.setup-heading {
+  top: 92px !important;
+  font-size: 38px !important;
+}
+.name-row {
+  position: absolute;
+  top: 166px;
+  left: 228px;
+  display: flex;
+  align-items: center;
+  gap: 27px;
+  font-size: 37px;
+}
+.name-row label {
+  width: 155px;
+}
+#player-name {
+  border: 0;
+  border-bottom: 1px solid transparent;
+  background: transparent;
+  color: #ddd;
+  font-size: 37px;
+  text-transform: uppercase;
+  width: 310px;
+  text-shadow:
+    1px 2px #777,
+    2px 3px #333;
+  padding: 0;
+  outline-offset: 5px;
+}
+#player-name:focus {
+  border-bottom-color: #888;
+  outline: none;
+}
+.color-row {
+  position: absolute;
+  top: 217px;
+  left: 198px;
+  display: flex;
+  align-items: center;
+  gap: 25px;
+  font-size: 37px;
+}
+.color-row > span:first-child {
+  width: 185px;
+}
+.color-name {
+  color: var(--color);
+  text-shadow:
+    1px 2px color-mix(in srgb, var(--color), black 50%),
+    2px 3px #171717;
+}
+.swatches {
+  position: absolute;
+  top: 273px;
+  left: 207px;
+  display: flex;
+  gap: 17px;
+}
+.swatch {
+  width: 33px;
+  height: 29px;
+  border: 0;
+  border-radius: 8px;
+  color: color-mix(in srgb, var(--color), #fff 15%);
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--color), #fff 8%),
+    var(--color) 35%,
+    color-mix(in srgb, var(--color), black 30%)
+  );
+  box-shadow:
+    inset 1px 1px 3px #fff3,
+    inset -2px -2px 2px #0005;
+  position: relative;
+}
+.swatch i {
+  font-family: "Russo One", sans-serif;
+  font-size: 20px;
+  font-style: normal;
+  text-shadow:
+    -1px -1px #0004,
+    1px 1px #fff3;
+}
+.swatch.chosen:after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border: 2px solid #a5a5a5;
+}
+.continue {
+  position: absolute;
+  top: 366px;
+  left: 0;
+  width: 100%;
+  font-size: 38px;
+  letter-spacing: 0.4px;
+}
+.back {
+  position: absolute;
+  left: 18px;
+  bottom: 15px;
+  background: none;
+  border: 0;
+  font-size: 11px;
+  color: #ad87c4;
+}
+.difficulty {
+  position: absolute;
+  top: 326px;
+  left: 290px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  font-size: 14px;
+  color: #c7accd;
+}
+.difficulty select {
+  padding: 3px 12px;
+  border: 1px solid #6b5880;
+  background: #130c1c;
+}
+.shop-heading {
+  top: 13px !important;
+  font-size: 39px !important;
+}
+.shop-instruction {
+  position: absolute;
+  top: 80px;
+  left: 0;
+  width: 100%;
+  text-align: center;
+  font-size: 20px;
+  color: white;
+}
+.draft-side {
+  position: absolute;
+  top: 81px;
+  width: 152px;
+  text-align: center;
+  color: var(--color);
+}
+.side-0 {
+  left: 21px;
+}
+.side-1 {
+  right: 21px;
+}
+.draft-side h2 {
+  font-size: 19px;
+  font-weight: 400;
+  height: 31px;
+}
+.draft-side ol {
+  height: 291px;
+  border: 3px solid color-mix(in srgb, var(--color), #000 20%);
+  box-shadow:
+    inset 0 0 0 1px #92929255,
+    0 0 3px #aaa4;
+  border-radius: 5px;
+  list-style: none;
+  text-align: left;
+  margin: 0;
+  padding: 9px;
+  font:
+    12px "Russo One",
+    sans-serif;
+  line-height: 26px;
+  background: linear-gradient(
+    color-mix(in srgb, var(--color), #000 95%),
+    #2d004244
+  );
+  color: #eee;
+}
+.draft-side small {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  font: 9px monospace;
+  color: var(--color);
+  opacity: 0.6;
+}
+.pick-arrow {
+  position: absolute;
+  top: 189px;
+  left: 183px;
+  text-align: center;
+  font-size: 11px;
+  line-height: 15px;
+  color: #ddd;
+}
+.pick-arrow b {
+  display: block;
+  font: 57px Arial;
+  color: #aaa;
+  text-shadow: 2px 2px #444;
+}
+.pick-arrow.right {
+  left: auto;
+  right: 183px;
+}
+.shop-weapons {
+  position: absolute;
+  top: 123px;
+  left: 261px;
+  width: 318px;
+  display: grid;
+  grid-template-rows: repeat(10, 23px);
+  grid-auto-flow: column;
+  grid-template-columns: 158px 158px;
+  gap: 4px 0;
+}
+.shop-weapons button {
+  height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 1px solid transparent;
+  background: none;
+  color: #eee;
+  font:
+    11px "Russo One",
+    sans-serif;
+  text-align: left;
+}
+.shop-weapons button:hover {
+  border-color: #4efaff;
+  background: #10374e;
+}
+.shop-weapons button:disabled {
+  opacity: 0.4;
+}
+.weapon-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 21px;
+  height: 21px;
+  background: linear-gradient(135deg, #ececec, #777 45%, #bababa 65%, #5b5b5b);
+  box-shadow:
+    inset 1px 1px #ddd,
+    inset -1px -1px #222;
+  color: var(--icon, #eee);
+  font:
+    bold 17px Georgia,
+    serif;
+  font-style: normal;
+  text-shadow:
+    1px 1px 1px #000,
+    -1px 0 #333;
+  line-height: 1;
+}
+.metal-button {
+  color: #eee;
+  background: linear-gradient(#b9b9b9, #666 12%, #8a8a8a 80%, #434343);
+  border: 3px outset #aaa;
+  text-shadow:
+    1px 1px #000,
+    -1px -1px #333;
+  font-weight: bold;
+  padding: 4px 9px;
+}
+.metal-button:hover {
+  filter: brightness(1.2);
+}
+.random {
+  position: absolute;
+  top: 410px;
+  left: 362px;
+  font-size: 18px;
+  padding: 0px 5px;
+}
+.options-form {
+  position: absolute;
+  top: 150px;
+  left: 210px;
+  width: 380px;
+}
+.options-form label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 21px;
+  font:
+    18px "Russo One",
+    sans-serif;
+}
+.options-form select {
+  font: 14px Arial;
+  background: #211129;
+  border: 1px solid #76657c;
+  padding: 8px;
+  width: 215px;
+}
+.options-form p {
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.8;
+  color: #b4a5bd;
+}
+.page-footer {
+  height: 50px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  max-width: 1240px;
+  margin: auto;
+  padding: 0 20px;
+  font-size: 9px;
+  color: #776e80;
+}
+#hud {
+  position: absolute;
+  top: 450px;
+  left: 0;
+  right: 0;
+  height: 150px;
+  pointer-events: none;
+}
+#hud > * {
+  pointer-events: auto;
+}
+#hud button {
+  color: #111;
+  border: 2px outset #929292;
+  background: linear-gradient(#aaa, #555);
+  padding: 0;
+  text-shadow: 1px 1px #aaa;
+}
+#hud button:hover:not(:disabled) {
+  filter: brightness(1.4);
+}
+#hud input {
+  min-width: 0;
+  width: 100%;
+  background: #090909;
+  color: #eee;
+  border: 0;
+  text-align: center;
+  font:
+    20px "Russo One",
+    sans-serif;
+  appearance: textfield;
+  -moz-appearance: textfield;
+  padding: 0;
+  outline-offset: 1px;
+}
+input::-webkit-inner-spin-button,
+input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+#hud label,
+#hud .move-control span {
+  font: bold 10px Arial;
+  color: #fff;
+  text-shadow: 1px 1px #000;
+}
+.move-control {
+  position: absolute;
+  top: 21px;
+  left: 237px;
+  width: 95px;
+  height: 44px;
+  border: 2px solid #aaa;
+  border-radius: 24px;
+  background: linear-gradient(#606060, #393939);
+  display: flex;
+  overflow: hidden;
+}
+.move-control > button {
+  width: 24px;
+  border: 0 !important;
+  font-size: 13px;
+}
+.move-control > div {
+  flex: 1;
+  background: #070707;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-shadow: 0 0 0 2px #888;
+}
+.move-control b {
+  color: #fff;
+  font:
+    23px "Russo One",
+    sans-serif;
+  line-height: 26px;
+}
+.move-control span {
+  background: #313131;
+  width: 100%;
+  text-align: center;
+  height: 14px;
+}
+.fire {
+  position: absolute;
+  top: 24px;
+  left: 362px;
+  width: 88px;
+  height: 39px;
+  border: 5px outset #b0b0b0 !important;
+  background: linear-gradient(#ccc, #777) !important;
+  font: bold italic 29px Arial !important;
+  color: #ff9c00 !important;
+  -webkit-text-stroke: 1px #141414;
+  text-shadow: 2px 2px #5b2600 !important;
+  line-height: 28px;
+}
+.angle-control {
+  position: absolute;
+  top: 15px;
+  left: 482px;
+  width: 80px;
+  height: 51px;
+  background: linear-gradient(#555, #333);
+  border: 2px solid #aaa;
+  border-radius: 42px 42px 0 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: end;
+}
+.angle-control > label {
+  height: 25px;
+  padding-top: 5px;
+}
+.angle-control > div {
+  display: flex;
+  height: 22px;
+  width: 100%;
+  background: #080808;
+  align-items: center;
+}
+.angle-control button {
+  width: 17px;
+  height: 23px;
+  flex-shrink: 0;
+}
+.angle-control input {
+  font-size: 20px !important;
+}
+.angle-control span {
+  font: 18px Arial;
+  color: #ddd;
+}
+.weapon-control {
+  position: absolute;
+  left: 236px;
+  top: 81px;
+  width: 174px;
+  height: 53px;
+  border: 4px ridge #a5a5a5;
+  background: #080808;
+}
+.weapon-control label {
+  position: absolute;
+  top: -14px;
+  left: 35px;
+  padding: 3px 16px 0;
+  background: #333;
+  border: 2px solid #999;
+  border-bottom: 0;
+  border-radius: 5px 5px 0 0;
+}
+.weapon-select {
+  position: absolute;
+  left: 0;
+  top: 9px;
+  width: 140px;
+  height: 32px !important;
+  border: 0 !important;
+  background: #080808 !important;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 1px 3px !important;
+  color: #eee !important;
+  text-shadow: none !important;
+  font:
+    11px "Russo One",
+    sans-serif;
+}
+.weapon-select span {
+  flex: 1;
+  text-align: center;
+}
+.weapon-select .weapon-icon {
+  width: 22px;
+  height: 22px;
+}
+.weapon-arrows {
+  position: absolute;
+  left: 144px;
+  top: 8px;
+  width: 21px;
+  display: flex;
+  flex-direction: column;
+}
+.weapon-arrows button {
+  height: 18px;
+  font-size: 12px;
+  line-height: 12px;
+}
+.power-control {
+  position: absolute;
+  left: 430px;
+  top: 81px;
+  width: 132px;
+  height: 53px;
+  border: 4px ridge #a5a5a5;
+  background: #090909;
+}
+.power-control > input {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  width: 119px !important;
+  margin: 3px 0 0;
+  height: 15px;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent 0,
+      transparent 6px,
+      #444 7px,
+      transparent 8px
+    ),
+    linear-gradient(90deg, #fa0909 var(--power), #070707 var(--power)) !important;
+  border: 1px solid #222 !important;
+  cursor: pointer;
+}
+.power-control > input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 3px;
+  height: 15px;
+  background: #ddd;
+}
+.power-control > input::-moz-range-thumb {
+  width: 3px;
+  height: 15px;
+  border: 0;
+  background: #ddd;
+}
+.power-control > div {
+  display: flex;
+  align-items: center;
+  position: absolute;
+  top: 25px;
+  left: 0;
+  right: -4px;
+  height: 24px;
+}
+.power-control label {
+  font-size: 10px !important;
+  width: 46px;
+  flex-shrink: 0;
+  background: #444;
+  border-radius: 0 0 0 14px;
+  height: 25px;
+  padding: 2px 4px;
+}
+.power-control button {
+  width: 18px;
+  flex-shrink: 0;
+  height: 23px;
+  font-size: 12px;
+}
+.power-control input {
+  font-size: 20px !important;
+}
+.turn-status {
+  position: absolute;
+  top: 5px;
+  left: 239px;
+  width: 210px;
+  color: #bfb6c7;
+  font:
+    7px "Russo One",
+    sans-serif;
+  letter-spacing: 0.4px;
+}
+.turn-status span {
+  display: none;
+}
+.battle-menu {
+  position: absolute;
+  right: 8px;
+  top: 7px;
+  width: 20px;
+  height: 20px;
+  font-size: 11px;
+  color: #777 !important;
+  background: none !important;
+  border: 0 !important;
+  text-shadow: none !important;
+}
+#overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+#overlay > * {
+  pointer-events: auto;
+}
+.veil {
+  position: absolute;
+  inset: 0;
+  background: #000b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dialog {
+  position: relative;
+  background: linear-gradient(#131016, #210b31);
+  border: 2px ridge #85778e;
+  box-shadow: 0 12px 70px #000;
+  padding: 28px;
+  width: 570px;
+  color: #d4c8df;
+}
+.dialog h2 {
+  font-size: 29px;
+  margin-bottom: 19px;
+  text-align: center;
+}
+.dialog p {
+  font-size: 13px;
+  line-height: 1.55;
+  margin-bottom: 13px;
+}
+.close {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  font-size: 27px;
+  background: none;
+  border: 0;
+  color: #a591b3;
+}
+.key-guide {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 7px;
+  font-size: 12px;
+  margin: 19px 0;
+}
+.key-guide span {
+  font-family: "Russo One", sans-serif;
+  color: #e7d8fa;
+}
+.key-guide b {
+  font-weight: normal;
+  color: #ad9fbc;
+}
+.help-small {
+  font-size: 11px !important;
+  color: #aa9bb7;
+}
+.help-dialog > .metal-button {
+  display: block;
+  margin: 18px auto 0;
+  min-width: 120px;
+}
+.pause-dialog {
+  text-align: center;
+  width: 440px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 19px;
+}
+.pause-dialog .gold {
+  font-size: 30px;
+}
+.pause-dialog h2,
+.pause-dialog p {
+  margin: 0;
+}
+.armory {
+  position: absolute;
+  left: 216px;
+  top: 75px;
+  width: 400px;
+  background: linear-gradient(#18111f, #31004b);
+  border: 3px ridge #a193a9;
+  box-shadow: 0 12px 60px #000b;
+  padding: 17px;
+}
+.armory header {
+  position: relative;
+  margin-bottom: 14px;
+}
+.armory h2 {
+  font-size: 23px;
+}
+.armory .close {
+  top: -10px;
+  right: -8px;
+}
+.arsenal-list {
+  max-height: 267px;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px 8px;
+}
+.arsenal-list button {
+  background: #0005;
+  border: 1px solid #6b507b;
+  color: #e6dfec;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font:
+    11px "Russo One",
+    sans-serif;
+  text-align: left;
+  padding: 4px;
+}
+.arsenal-list button:hover,
+.arsenal-list .selected {
+  border-color: #6ce5fa;
+  background: #4b2463;
+}
+.armory p {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid #6a4380;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #cdb8da;
+  min-height: 42px;
+}
+#toast {
+  position: absolute;
+  top: 65px;
+  left: 200px;
+  width: 400px;
+  text-align: center;
+  padding: 8px 14px;
+  background: #160922df;
+  border: 1px solid #79548b;
+  color: #dfc6ec;
+  font-size: 12px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+  z-index: 4;
+}
+#toast.visible {
+  opacity: 1;
+}
+.results {
+  position: absolute;
+  top: 47px;
+  left: 80px;
+  width: 640px;
+  padding: 22px;
+  background: linear-gradient(#090909ed, #270037ed);
+  border: 1px solid #6c4681;
+  box-shadow: 0 10px 60px #000;
+}
+.results .eyebrow {
+  text-align: center;
+  color: #b797c7;
+  font-size: 10px;
+  letter-spacing: 2px;
+}
+.results h1 {
+  position: static !important;
+  font-size: 32px !important;
+  margin: 13px 0 24px;
+}
+.scorecards {
+  display: flex;
+  gap: 30px;
+  justify-content: center;
+}
+.scorecards > div {
+  width: 225px;
+  text-align: center;
+  border-top: 2px solid var(--color);
+  padding-top: 12px;
+}
+.scorecards strong {
+  font:
+    18px "Russo One",
+    sans-serif;
+  color: var(--color);
+}
+.scorecards b {
+  display: block;
+  font-size: 48px;
+  margin: 10px 0;
+}
+.scorecards span {
+  font-size: 10px;
+  color: #a797b0;
+}
+.result-details {
+  display: flex;
+  justify-content: space-between;
+  margin: 20px 20px;
+  padding-top: 16px;
+  border-top: 1px solid #68467b;
+  font-size: 12px;
+}
+.result-details span {
+  color: #a38eaf;
+}
+.result-details strong {
+  font-weight: normal;
+  color: #dfcfec;
+}
+.result-actions {
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+}
+.log-toggle {
+  display: block;
+  margin: 14px auto 0;
+  font-size: 10px;
+  color: #aa8eba;
+}
+#shot-log {
+  max-height: 130px;
+  overflow: auto;
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: #0007;
+  font-size: 10px;
+  line-height: 2;
+}
+#shot-log b {
+  float: right;
+  color: #dac1eb;
+}
+@media (max-width: 650px) {
+  .page-bar {
+    height: 45px;
+    padding: 0 12px;
+  }
+  .wordmark {
+    font-size: 10px;
+  }
+  .wordmark span,
+  .page-bar a:not(.wordmark) {
+    display: none;
+  }
+  .page-bar > div {
+    gap: 16px;
+  }
+  .page-bar button {
+    font-size: 9px;
+  }
+  .page-footer {
+    height: 57px;
+    font-size: 8px;
+    justify-content: center;
+    text-align: center;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px 16px;
+  }
+}
+@media (max-height: 500px) {
+  .page-bar {
+    height: 28px;
+  }
+  .page-footer {
+    height: 24px;
+    font-size: 8px;
+  }
+  main {
+    min-height: calc(100dvh - 52px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}
+/* Wider lettering and small engravings evoke the classic metallic interface. */
+#panel h1,
+.splash-copy .chrome {
+  transform: scaleX(1.2);
+}
+.name-row label,
+.color-row > span:first-child {
+  transform: scaleX(1.22);
+  transform-origin: left center;
+}
+#player-name {
+  transform: scaleX(1.12);
+  transform-origin: left center;
+}
+.color-name {
+  transform: scaleX(1.18);
+  transform-origin: left center;
+}
+.continue {
+  transform: scaleX(1.23);
+}
+.swatch i {
+  display: inline-block;
+  transform: rotate(-30deg) scale(0.8);
+  font-size: 16px;
+}
+#hud .power-control > input {
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent 0,
+      transparent 6px,
+      #222 7px,
+      transparent 8px
+    ),
+    linear-gradient(90deg, #fa0909 var(--power), #070707 var(--power)) !important;
+}
+.splash-copy {
+  gap: 26px;
+}
+.splash-copy .chrome {
+  transform: scaleX(1.35);
+}
+.results {
+  max-height: 380px;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+#touch-controls {
+  display: none;
+}
+@media (max-width: 650px) {
+  main {
+    flex-direction: column;
+    gap: 12px;
+    padding: 10px 0;
+  }
+  #touch-controls:not([hidden]) {
+    display: grid;
+    width: min(440px, calc(100vw - 24px));
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  #touch-controls button,
+  #touch-controls select {
+    min-height: 44px;
+    border: 1px solid #594267;
+    background: linear-gradient(#302139, #1e1425);
+    color: #d5c0e1;
+    border-radius: 5px;
+    font-family: "Russo One", sans-serif;
+    font-size: 12px;
+  }
+  #touch-controls button:disabled,
+  #touch-controls select:disabled {
+    opacity: 0.5;
+  }
+  .touch-number {
+    display: grid;
+    grid-template-columns: 44px 1fr 44px;
+    background: #160c1e;
+    border: 1px solid #3d2b49;
+    border-radius: 5px;
+    overflow: hidden;
+  }
+  .touch-number > span {
+    grid-column: 1/-1;
+    text-align: center;
+    font-size: 8px;
+    letter-spacing: 1px;
+    padding: 6px;
+    color: #b292c5;
+  }
+  .touch-number output {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font:
+      18px "Russo One",
+      sans-serif;
+  }
+  .touch-number button {
+    border: 0 !important;
+    font-size: 19px !important;
+    border-radius: 0 !important;
+  }
+  #touch-weapon {
+    padding: 8px;
+    width: 100%;
+  }
+  #touch-controls .touch-fire {
+    background: linear-gradient(#b05d13, #6e2c10);
+    color: #ffe18c;
+    font-size: 19px;
+    letter-spacing: 1px;
+    border-color: #d78b2d;
+  }
+  .touch-moves {
+    grid-column: 1/-1;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    align-items: center;
+    text-align: center;
+  }
+  .touch-moves span {
+    font-size: 10px;
+    color: #9f83af;
+  }
+}

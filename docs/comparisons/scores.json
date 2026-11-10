@@ -1,0 +1,157 @@
+{
+  "weights": [
+    0.2,
+    0.2,
+    0.15,
+    0.15,
+    0.2,
+    0.1
+  ],
+  "frames": [
+    {
+      "id": "titlescreen",
+      "name": "Title",
+      "before": [
+        8,
+        6.5,
+        8,
+        6,
+        7,
+        6
+      ],
+      "scores": [
+        9,
+        8,
+        8.5,
+        6.5,
+        8.5,
+        7
+      ],
+      "note": "The black stage, corner scores, purple/gold logo, rainbow rules, and three text bands align. Logo letterforms and metallic bevels remain visibly different. Tribute wording replaces the original publisher promotion.",
+      "score": 8.1,
+      "initial": 7.0,
+      "source": "https://classic.blitwise.com/ptanks/pt_titlescreen.jpg"
+    },
+    {
+      "id": "player1",
+      "name": "Player setup",
+      "before": [
+        9,
+        8,
+        8,
+        6.5,
+        7.5,
+        7
+      ],
+      "scores": [
+        9.5,
+        8.5,
+        9,
+        7,
+        8,
+        7.5
+      ],
+      "note": "Heading, name, colour label, eight swatches, Continue, and inactive HUD sit in the reference positions. The original futuristic font and more detailed silver tank are the largest differences.",
+      "score": 8.4,
+      "initial": 7.8,
+      "source": "https://classic.blitwise.com/ptanks/pt_player1.jpg"
+    },
+    {
+      "id": "weaponshop",
+      "name": "Weapon shop",
+      "before": [
+        9,
+        8.5,
+        8.5,
+        6.5,
+        7.5,
+        6.5
+      ],
+      "scores": [
+        9.5,
+        9,
+        9,
+        7,
+        8,
+        7
+      ],
+      "note": "Two ten-row weapon columns, coloured inventory wells, pick arrow, Random, and bottom HUD reproduce the shop composition. Icons are original symbols, and typography and bevels are approximate.",
+      "score": 8.4,
+      "initial": 7.9,
+      "source": "https://classic.blitwise.com/ptanks/pt_weaponshop.jpg"
+    },
+    {
+      "id": "spider",
+      "name": "Spider impact",
+      "before": [
+        8.5,
+        6.5,
+        8,
+        6.5,
+        7.5,
+        5.5
+      ],
+      "scores": [
+        9,
+        8.5,
+        9,
+        7,
+        8,
+        7.5
+      ],
+      "note": "The mountain silhouette, green strata, score corners, 69\u00b0 / 76 controls, web streaks, and gold impact rings now correspond. Small tank geometry, web directions, exact explosion timing, and HUD artwork differ.",
+      "score": 8.3,
+      "initial": 7.2,
+      "source": "https://classic.blitwise.com/ptanks/pt_spider.jpg"
+    },
+    {
+      "id": "hailstorm",
+      "name": "Hail Storm",
+      "before": [
+        7,
+        5.5,
+        8,
+        6.5,
+        7.5,
+        4.5
+      ],
+      "scores": [
+        9,
+        8.5,
+        9,
+        7,
+        8,
+        7
+      ],
+      "note": "Valley and cliff geometry, palette, 70\u00b0 / 73 controls, and flowing blue particles correspond. Our effect is more segmented and less misty than the original; tank and font detail also remain approximate.",
+      "score": 8.2,
+      "initial": 6.6,
+      "source": "https://classic.blitwise.com/ptanks/pt_hailstorm.jpg"
+    },
+    {
+      "id": "tommygun",
+      "name": "Tommy Gun",
+      "before": [
+        8,
+        6.5,
+        8,
+        6.5,
+        7.5,
+        5
+      ],
+      "scores": [
+        9,
+        8.5,
+        9,
+        7,
+        8,
+        8
+      ],
+      "note": "Plateau, steep drop, low right tank, 29\u00b0 / 59 controls, and separated blue ballistic bullets correspond. Arc timing and spacing are close rather than identical; original font and tank model differ.",
+      "score": 8.3,
+      "initial": 7.1,
+      "source": "https://classic.blitwise.com/ptanks/pt_tommygun.jpg"
+    }
+  ],
+  "review": "Subjective author assessment; not an independent or automated likeness score."
+}
